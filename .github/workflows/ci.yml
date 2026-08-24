@@ -32,6 +32,12 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          # The suite asks git whether the commit the matrix was attested at is
+          # an ancestor of the commit under test — that is what stops evidence
+          # from a different line of development being claimed here. A shallow
+          # clone has no such history to answer from, so the check fails on a
+          # correct tree for the wrong reason.
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.x
