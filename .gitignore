@@ -1,0 +1,13 @@
+.mcp.json
+.pi/
+.pi-subagents/
+AGENTS.md
+docs/*
+!docs/public/
+!docs/public/**
+node_modules
+*.db
+*.db-shm
+*.db-wal
+*.tgz
+.release-evidence/

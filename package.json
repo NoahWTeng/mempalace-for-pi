@@ -1,0 +1,59 @@
+{
+  "name": "mempalace-for-pi",
+  "version": "0.1.0",
+  "description": "Community Pi integration for the official MemPalace core.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "extension",
+    "mempalace",
+    "mcp",
+    "memory"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NoahWTeng/mempalace-for-pi.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "exports": {
+    ".": "./extensions/index.ts"
+  },
+  "files": [
+    "integration",
+    "extensions/index.ts",
+    "docs/public",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "MIGRATION_PROVENANCE.md"
+  ],
+  "scripts": {
+    "check": "tsc --noEmit",
+    "check:repository": "node scripts/check-public-repository.mjs",
+    "release:check": "bash scripts/gate-release.sh",
+    "release:evidence": "node scripts/release-gate.mjs --runs 3",
+    "test": "node --test --test-concurrency=1 --experimental-strip-types test/mempalace/*.test.ts test/mempalace/*.test.mjs",
+    "test:integration": "node --test --experimental-strip-types test/mempalace/*.test.ts",
+    "test:package-boundary": "node --test test/mempalace/package-boundary.test.mjs",
+    "test:packaged": "bash scripts/gate-packaged.sh"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.84.2 <0.85.0",
+    "typebox": ">=1.3.7 <2"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@types/node": "22.20.1",
+    "typebox": "^1.3.7",
+    "typescript": "5.9.3"
+  }
+}
