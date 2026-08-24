@@ -192,8 +192,16 @@ run_linux() {
       [[ "$(uname -m)" == "aarch64" ]]
       [[ "$(node --version)" == "$EXPECTED_NODE"* ]]
       mkdir /work /tmp/home /tmp/pi-agent /tmp/npm-cache
+      # --no-same-owner because this container deliberately runs with
+      # --cap-drop ALL. Extracting as root, tar tries to restore the original
+      # uid/gid of every entry, which needs CAP_CHOWN, which was dropped on
+      # purpose, so the copy aborts. Everything inside runs as root regardless,
+      # so the ownership being restored is meaningless here; dropping the
+      # attempt keeps the capability restriction intact rather than relaxing it.
+      # Docker Desktop on macOS masks this by mapping ownership on the bind
+      # mount, so it only ever appears on a native Linux host.
       tar -C /source --exclude=node_modules --exclude=candidate --exclude=.release-evidence \
-        -cf - . | tar -C /work -xf -
+        -cf - . | tar -C /work --no-same-owner -xf -
       cd /work
       export HOME=/tmp/home PI_CODING_AGENT_DIR=/tmp/pi-agent npm_config_cache=/tmp/npm-cache
       export NPM_CONFIG_USERCONFIG=/dev/null
