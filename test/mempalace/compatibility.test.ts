@@ -96,7 +96,7 @@ test('the manifest publishes under exactly the intended identity', () => {
   const manifest = readManifest();
   assert.equal(manifest.private, undefined, 'a private manifest cannot be published');
   assert.equal(manifest.name, 'mempalace-for-pi');
-  assert.equal(manifest.version, '0.1.0');
+  assert.equal(manifest.version, '0.1.1');
   // Left undefined deliberately: an unscoped package already publishes publicly
   // to the default registry, so the only thing a publishConfig could do here is
   // redirect the release somewhere the reader is not expecting.
@@ -214,6 +214,19 @@ test('the release gate checks version consistency without pinning a version', ()
   );
   assert.match(consistency, /lock\.version !== pkg\.version/u, 'lock and manifest must still agree');
   assert.match(consistency, /lock\.packages\[''\]\.version !== pkg\.version/u, 'the lock root entry must still agree');
+
+  // The same pin survived in the evidence gate, which is a separate file and was
+  // therefore missed when the shell gate was fixed. It only surfaced on the next
+  // release, where it threw before recording anything and took three unrelated
+  // transcript tests down with it. Both copies are checked here so the variant
+  // cannot come back through whichever file is not being looked at.
+  const evidenceGate = readRepositoryFile('scripts/release-gate.mjs');
+  assert.deepEqual(
+    [...evidenceGate.matchAll(/packageJson\.version,\s*'\d+\.\d+\.\d+'/gu)].map(([match]) => match),
+    [],
+    'the evidence gate must not compare the package version against a literal',
+  );
+  assert.match(evidenceGate, /lockJson\.version, packageJson\.version/u, 'lock and manifest must still agree');
 });
 
 // The eight cells each measured one pairing and then nothing joined them up:

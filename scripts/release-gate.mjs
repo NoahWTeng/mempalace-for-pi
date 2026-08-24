@@ -185,7 +185,11 @@ try {
 
   const packageJson = readJson('package.json');
   const lockJson = readJson('package-lock.json');
-  assert.equal(packageJson.version, '0.1.0', 'release candidate version must be 0.1.0');
+  // The rule is that the three recorded versions agree, not that they equal one
+  // number. Pinning the literal made every release after the first impossible:
+  // `npm version` updates all three consistently and the gate still threw. The
+  // same pin was removed from `gate-release.sh`; this copy survived it.
+  assert.match(packageJson.version, /^\d+\.\d+\.\d+$/u, 'package version is not a release version');
   assert.equal(lockJson.version, packageJson.version, 'package-lock version differs from package version');
   assert.equal(lockJson.packages?.['']?.version, packageJson.version, 'package-lock root version differs');
 

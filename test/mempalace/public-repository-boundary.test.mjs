@@ -600,10 +600,14 @@ test('a failed release check writes no key material to its evidence file or to s
   try {
     const packageRoot = join(directory, 'candidate', 'package');
     mkdirSync(packageRoot, { recursive: true });
+    // Derived, not pinned: the gate rejects a candidate whose version differs
+    // from the workspace, so a literal here turns every version bump into a
+    // failure of this redaction test — which is about key material, not
+    // versions, and would report the wrong cause.
     writeFileSync(join(packageRoot, 'package.json'), `${JSON.stringify({
       engines: { node: '>=22.19.0' },
       name: 'mempalace-for-pi',
-      version: '0.1.0',
+      version: JSON.parse(readRepositoryFile('package.json')).version,
     })}\n`);
     const tarball = join(directory, 'candidate.tgz');
     const packed = spawnSync('tar', ['-czf', tarball, '-C', join(directory, 'candidate'), 'package'], {
