@@ -51,7 +51,12 @@ being tagged.
    download the aggregate and commit it:
 
    ```bash
-   gh run download <run-id> --name task-967-matrix --dir .github/verification
+   # `gh run download` will not overwrite an existing file, and refreshing always
+   # means one exists, so land it in a temporary directory and move it into place.
+   tmp="$(mktemp -d)"
+   gh run download <run-id> --name task-967-matrix --dir "$tmp"
+   mv "$tmp/task-967-matrix.json" .github/verification/
+   rm -rf "$tmp"
    ```
 
    CI never commits it itself. Doing so would need `contents: write` in a
