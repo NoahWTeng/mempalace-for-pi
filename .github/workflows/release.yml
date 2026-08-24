@@ -77,7 +77,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      # v7, not the v4 the other jobs pin. Up to v6, setup-node with a
+      # `registry-url` writes an `.npmrc` whose authToken falls back to a
+      # dummy placeholder when `NODE_AUTH_TOKEN` is unset — npm then finds a
+      # credential, sends the placeholder, and never attempts the OIDC
+      # exchange, so the publish dies as anonymous (E404 on the PUT). v7's
+      # breaking change removed that fallback precisely because of this.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24.x
           registry-url: https://registry.npmjs.org
