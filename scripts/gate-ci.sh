@@ -236,7 +236,7 @@ run_linux() {
     -e EXPECTED_NODE="$expected_node" -e MEMPALACE_ACCEPTANCE_VERSION="$mempalace_version" \
     -e MEMPALACE_MATRIX_EVIDENCE=/evidence/cell.jsonl \
     -v "$root:/source:ro" \
-    -v "$tarball:/candidate/mempalace-for-pi-0.1.0.tgz:ro" \
+    -v "$tarball:/candidate/mempalace-for-pi-0.1.1.tgz:ro" \
     -v "$tmp/uv:/usr/local/bin/uv:ro" \
     -v "$cell_evidence:/evidence/cell.jsonl" \
     "$image" bash -lc '
@@ -260,7 +260,7 @@ run_linux() {
       if [[ -n "$MATRIX_SOURCE_COMMIT" ]]; then export EXPECTED_SOURCE_COMMIT="$MATRIX_SOURCE_COMMIT"; fi
       npm ci
       export PI_BINARY=/work/node_modules/.bin/pi
-      release_args=(--tarball /candidate/mempalace-for-pi-0.1.0.tgz)
+      release_args=(--tarball /candidate/mempalace-for-pi-0.1.1.tgz)
       if [[ -n "$MEMPALACE_ACCEPTANCE_VERSION" ]]; then
         release_args+=(--mempalace-version "$MEMPALACE_ACCEPTANCE_VERSION")
       fi

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.1] - 2026-08-24
+
+Widens the Pi peer range so a Pi minor release cannot refuse the install.
+
+### Fixed
+
+- `peerDependencies` on `@earendil-works/pi-coding-agent` is now `>=0.84.2 <1.0.0`, previously `>=0.84.2 <0.85.0`. The old upper bound would have refused installation on the first Pi `0.85` release. Nothing in the integration resolves Pi at run time — every import of the package is `import type`, so the types are erased and Pi hands the extension its API at load — which means an upper bound cannot prevent a runtime incompatibility, only an install. The major boundary still applies, where a breaking change is deliberately signalled.
+
+### Unchanged
+
+- The support claim is untouched. [Public compatibility documentation](docs/public/compatibility.md) remains the exhaustive green matrix, and the verified pairings still declare Pi `0.84.2` alone. Every other Pi release is unverified and carries no support claim; a wider install range is not a wider tested surface.
+
 ## [0.1.0] - 2026-08-24
 
 First public release of the community integration, published to npm as `mempalace-for-pi` and tagged `v0.1.0`.
