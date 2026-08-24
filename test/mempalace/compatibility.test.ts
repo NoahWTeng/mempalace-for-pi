@@ -192,6 +192,30 @@ test('the release workflow derives the candidate instead of naming a version', (
   assert.match(release, /candidateSha256/u, 'the release must compare against the attested digest');
 });
 
+// The release gate asserts that package.json and both places package-lock.json
+// records a version agree with each other. It used to assert they all equalled
+// the literal `0.1.0`, which made it impossible to release anything else: a
+// correct `npm version` bump updates all three consistently and the gate still
+// threw, reporting inconsistent metadata that was in fact consistent. Nothing
+// caught it, because the gate is only reached on a release and there had only
+// ever been one. The consistency rule is worth keeping; the pin is not.
+test('the release gate checks version consistency without pinning a version', () => {
+  const gate = readRepositoryFile('scripts/gate-release.sh');
+  // Scoped to the block before the argument-handling helpers rather than the
+  // whole file: further down the gate legitimately quotes versions in fixtures,
+  // and a test that scanned those would fail for the wrong reason. If the marker
+  // ever moves, say so instead of quietly widening to the whole file.
+  const [consistency] = gate.split('\nexpect_argument_failure()');
+  assert.ok(consistency && consistency !== gate, 'the version consistency block was not found');
+  assert.deepEqual(
+    [...consistency.matchAll(/pkg\.version\s*!==\s*'[^']+'/gu)].map(([match]) => match),
+    [],
+    'the release gate must not compare the package version against a literal',
+  );
+  assert.match(consistency, /lock\.version !== pkg\.version/u, 'lock and manifest must still agree');
+  assert.match(consistency, /lock\.packages\[''\]\.version !== pkg\.version/u, 'the lock root entry must still agree');
+});
+
 test('the Linux Docker gate uses init to reap exited grandchildren', () => {
   const linuxRun = readRepositoryFile('scripts/gate-ci.sh').match(/docker run --rm[^\n]*--platform linux\/arm64/u)?.[0];
   assert.ok(linuxRun, 'the Linux Docker gate must run the pinned ARM64 container');

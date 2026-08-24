@@ -28,8 +28,17 @@ node - <<'NODE'
 const fs = require('node:fs');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
-if (pkg.version !== '0.1.0' || lock.version !== pkg.version || lock.packages[''].version !== pkg.version) {
-  throw new Error('package metadata is not consistently versioned 0.1.0');
+// The invariant is that the three places a version is recorded agree with each
+// other, not that they say any one number. Pinning the literal blocked every
+// release after the first: `npm version` updates all three consistently, and
+// this still threw before a single check ran, with a message claiming the
+// metadata was inconsistent when it was perfectly consistent.
+if (!/^\d+\.\d+\.\d+$/u.test(pkg.version) ||
+    lock.version !== pkg.version || lock.packages[''].version !== pkg.version) {
+  throw new Error(
+    `package metadata is not consistently versioned: package.json ${pkg.version}, ` +
+    `lock ${lock.version}, lock root ${lock.packages[''].version}`,
+  );
 }
 NODE
 
