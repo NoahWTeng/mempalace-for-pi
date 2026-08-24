@@ -1,22 +1,56 @@
 name: CI
 
-# These jobs run on a self-hosted runner, so the trigger set is part of the
-# security boundary rather than a convenience. `push` to main and manual
-# dispatch both require write access already. Adding `pull_request` would let
-# any fork execute its own code on that machine; fork CI needs GitHub-hosted
-# runners first.
+# Every job here runs on a GitHub-hosted runner, and that is what makes the
+# trigger set safe. While this workflow targeted a self-hosted runner, a
+# `pull_request` trigger would have handed any fork the ability to execute its
+# own code on the maintainer's machine, so the trigger was deliberately limited
+# to events that already require write access. Hosted runners are disposable and
+# credential-free, so fork pull requests can — and must — be validated here.
+#
+# `scripts/gate-ci.sh` enforces the invariant that actually matters now: no job
+# in this repository may declare a self-hosted runner. Reintroducing one while
+# `pull_request` is present fails that gate rather than silently reopening the
+# hole.
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  candidate:
+  # The gate that runs on every event, including fork pull requests. It is the
+  # whole static contract — types, the full suite, and the public-tree boundary
+  # — and it finishes in a couple of minutes, so it is the check that can
+  # reasonably block a merge.
+  quick:
     if: github.repository == 'NoahWTeng/mempalace-for-pi'
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.x
+      - run: |
+          state="$(mktemp -d)"
+          trap 'rm -rf "$state"' EXIT
+          export HOME="$state/home" npm_config_cache="$state/npm-cache" NPM_CONFIG_USERCONFIG=/dev/null
+          mkdir -p "$HOME"
+          npm ci --ignore-scripts
+          npm run check
+          npm test
+          npm run check:repository
+
+  # Packs the one candidate every matrix cell then measures. Skipped on pull
+  # requests: a fork's tree is not a release candidate, and the identity checks
+  # below are about what `main` would ship.
+  candidate:
+    if: github.repository == 'NoahWTeng/mempalace-for-pi' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
     outputs:
       sha256: ${{ steps.candidate.outputs.sha256 }}
     steps:
@@ -46,10 +80,15 @@ jobs:
           path: ${{ runner.temp }}/release-candidate/
           if-no-files-found: error
 
+  # The eight-cell compatibility matrix. It installs a real MemPalace core and
+  # drives Pi's whole package lifecycle per cell, so it costs roughly half an
+  # hour and is not something to run on every commit. It is the deliberate
+  # pre-release act that refreshes `.github/verification/task-967-matrix.json`,
+  # which is why it is manual-only.
   macos-arm64:
     needs: candidate
-    if: github.repository == 'NoahWTeng/mempalace-for-pi'
-    runs-on: [self-hosted, macOS, ARM64]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
     strategy:
       fail-fast: true
       matrix:
@@ -83,10 +122,14 @@ jobs:
               --tarball "$RUNNER_TEMP/release-candidate/mempalace-for-pi-0.1.0.tgz" \
               --mempalace-version "${{ matrix.mempalace-version }}"
 
+  # `ubuntu-24.04-arm` is arm64 hardware, so the digest-pinned ARM64 container
+  # `gate-ci.sh` starts runs natively instead of under emulation. The container
+  # is kept rather than running the gate directly on the host because it is what
+  # pins the exact Node image each Linux cell is attested against.
   linux-arm64:
     needs: candidate
-    if: github.repository == 'NoahWTeng/mempalace-for-pi'
-    runs-on: [self-hosted, macOS, ARM64]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: true
       matrix:

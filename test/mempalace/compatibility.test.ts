@@ -179,6 +179,19 @@ test('CI and the CI gate consume the tarball this manifest actually packs', () =
   }
 });
 
+// The release workflow is held to the opposite rule, and deliberately so. The
+// matrix jobs above mount one specific artifact by name, so a stale name there
+// would silently verify the wrong file. The release workflow instead packs the
+// tree it checked out and compares that digest to the attested one, so naming a
+// version at all would add a literal that goes stale at the next bump while
+// proving nothing the digest comparison does not already prove.
+test('the release workflow derives the candidate instead of naming a version', () => {
+  const release = readRepositoryFile('.github/workflows/release.yml');
+  assert.deepEqual([...release.matchAll(/[A-Za-z0-9@._-]+-\d+\.\d+\.\d+\.tgz/g)].map(([m]) => m), []);
+  assert.match(release, /npm pack --pack-destination/u, 'the release must pack the tree it verifies');
+  assert.match(release, /candidateSha256/u, 'the release must compare against the attested digest');
+});
+
 test('the Linux Docker gate uses init to reap exited grandchildren', () => {
   const linuxRun = readRepositoryFile('scripts/gate-ci.sh').match(/docker run --rm[^\n]*--platform linux\/arm64/u)?.[0];
   assert.ok(linuxRun, 'the Linux Docker gate must run the pinned ARM64 container');
@@ -200,6 +213,7 @@ const ACTIVE_VERIFICATION_SOURCES = [
   'scripts/gate-packaged.sh',
   'scripts/gate-ci.sh',
   '.github/workflows/ci.yml',
+  '.github/workflows/release.yml',
 ];
 
 function currentMemPalaceSuites(): string[] {

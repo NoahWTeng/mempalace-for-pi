@@ -4,19 +4,90 @@ cd "$(dirname "$0")/.."
 
 command -v actionlint >/dev/null || { echo 'actionlint is required' >&2; exit 1; }
 command -v docker >/dev/null || { echo 'docker is required' >&2; exit 1; }
-actionlint .github/workflows/ci.yml
+actionlint .github/workflows/ci.yml .github/workflows/release.yml
 npm run check:repository
 
 node - <<'NODE'
 const fs = require('node:fs');
 const workflow = fs.readFileSync('.github/workflows/ci.yml', 'utf8');
+const release = fs.readFileSync('.github/workflows/release.yml', 'utf8');
 const gate = fs.readFileSync('scripts/gate-ci.sh', 'utf8');
-if (/\bpull_request(?:_target)?\b/.test(workflow)) {
-  throw new Error('untrusted pull requests must not reach self-hosted runners');
+
+// Rules that hold for every workflow in the repository. A new workflow file
+// used to escape this gate entirely, which meant the weakest workflow set the
+// repository's real security posture while this one enforced the strongest.
+const WORKFLOWS = [['ci.yml', workflow], ['release.yml', release]];
+for (const [name, source] of WORKFLOWS) {
+  // The invariant that replaced the old blanket `pull_request` ban. That ban
+  // existed because these jobs ran on the maintainer's own machine, where a
+  // fork's code must never execute. Hosted runners are disposable and hold no
+  // credentials, so validating fork pull requests is both safe and necessary —
+  // but only while no job reintroduces a self-hosted runner. Checking the cause
+  // instead of the symptom is what keeps `pull_request` from silently becoming
+  // dangerous again.
+  //
+  // Only `runs-on:` decides where a job executes, so only `runs-on:` is
+  // inspected. Matching the whole file would make the comment above — which
+  // explains why this rule exists — trip the rule itself, and a guard that
+  // forbids describing the hazard it guards against gets weakened by whoever
+  // next needs to write that sentence.
+  for (const line of source.split('\n').filter((line) => /^\s*runs-on:/.test(line))) {
+    if (/self-hosted/.test(line)) {
+      throw new Error(`${name} declares a self-hosted runner while pull requests are validated: ${line.trim()}`);
+    }
+  }
+  for (const line of source.split('\n').filter((line) => line.includes('uses:'))) {
+    if (!/uses: [^@]+@[a-f0-9]{40}(?:\s|$)/.test(line)) throw new Error(`action is not SHA-pinned in ${name}: ${line.trim()}`);
+  }
+  const lines = source.split('\n');
+  for (const [index, line] of lines.entries()) {
+    if (!line.includes('uses: actions/checkout@')) continue;
+    const stepIndent = line.match(/^\s*/)[0].length;
+    let end = index + 1;
+    while (end < lines.length) {
+      const indent = lines[end].match(/^\s*/)[0].length;
+      if (indent === stepIndent && lines[end].trimStart().startsWith('- ')) break;
+      end++;
+    }
+    if (!lines.slice(index + 1, end).some((later) => /^\s+persist-credentials:\s*false\s*$/.test(later))) {
+      throw new Error(`${name} checkout lacks persist-credentials: false at line ${index + 1}`);
+    }
+  }
 }
+
+// Fork validation is now a requirement, not a permission: without it a public
+// repository accepts contributions no gate has ever seen.
+if (!/^  pull_request:$/m.test(workflow)) throw new Error('fork pull requests must be validated');
 if (!workflow.includes('workflow_dispatch:')) throw new Error('trusted manual matrix trigger missing');
 if ((workflow.match(/\bpermissions:/g) ?? []).length !== 1 || !/^permissions:\n  contents: read$/m.test(workflow)) {
   throw new Error('workflow permissions must be only top-level contents: read');
+}
+
+// The release workflow is the only thing here that can write outside the
+// repository, so its authority is scoped per job rather than granted at the
+// top. `id-token: write` mints the OIDC token npm exchanges for provenance and
+// belongs to the publishing job alone; `contents: write` belongs to the job
+// that creates the GitHub release. Granting either at the top level would hand
+// them to every job, including the one that runs the test suite.
+if (!/^on:\n  push:\n    tags: \['v\*'\]$/m.test(release)) throw new Error('release must be driven by a version tag');
+if (!/^permissions:\n  contents: read$/m.test(release)) throw new Error('release must default to read-only authority');
+if ((release.match(/id-token: write/g) ?? []).length !== 1) throw new Error('exactly one job may mint an OIDC token');
+if ((release.match(/contents: write/g) ?? []).length !== 1) throw new Error('exactly one job may write repository contents');
+for (const [job, granted] of [['publish', 'id-token: write'], ['github-release', 'contents: write']]) {
+  const body = release.split(`\n  ${job}:\n`)[1]?.split(/\n  [a-z-]+:\n/)[0];
+  if (!body) throw new Error(`release job not found: ${job}`);
+  if (!body.includes(granted)) throw new Error(`${granted} must be scoped to the ${job} job`);
+}
+if (!release.includes('npm publish --provenance --access public')) {
+  throw new Error('the published package must carry a provenance attestation');
+}
+// Publication is gated on the digest the matrix attested, not on the tag alone.
+if (!release.includes('task-967-matrix.json') || !release.includes('npm pack') ||
+    !/GITHUB_REF_NAME" != "v\$version/.test(release)) {
+  throw new Error('release must verify the tag and the attested candidate digest');
+}
+if (!release.includes('needs: verify') || !release.includes('needs: publish')) {
+  throw new Error('publish and release must depend on the verification job');
 }
 if (!workflow.includes('macos-arm64:') || !workflow.includes('linux-arm64:')) throw new Error('ARM64 matrix jobs missing');
 if ((workflow.match(/node-version: \[22\.19\.0, 24\.x\]/g) ?? []).length !== 2) {
@@ -26,24 +97,6 @@ if ((workflow.match(/pi-version: \[0\.84\.2\]/g) ?? []).length !== 2 ||
     (workflow.match(/mempalace-version: \[3\.6\.0, 3\.7\.1\]/g) ?? []).length !== 2 ||
     !workflow.includes('gate-release.sh') || !workflow.includes('--mempalace-version')) {
   throw new Error('Pi/MemPalace packaged acceptance matrices missing');
-}
-for (const line of workflow.split('\n').filter((line) => line.includes('uses:'))) {
-  if (!/uses: [^@]+@[a-f0-9]{40}(?:\s|$)/.test(line)) throw new Error(`action is not SHA-pinned: ${line.trim()}`);
-}
-const lines = workflow.split('\n');
-for (const [index, line] of lines.entries()) {
-  if (!line.includes('uses: actions/checkout@')) continue;
-  const stepIndent = line.match(/^\s*/)[0].length;
-  let end = index + 1;
-  while (end < lines.length) {
-    const indent = lines[end].match(/^\s*/)[0].length;
-    if (indent === stepIndent && lines[end].trimStart().startsWith('- ')) break;
-    end++;
-  }
-  const step = lines.slice(index + 1, end);
-  if (!step.some((later) => /^\s+persist-credentials:\s*false\s*$/.test(later))) {
-    throw new Error(`checkout lacks persist-credentials: false at line ${index + 1}`);
-  }
 }
 if (!workflow.includes('needs.candidate.outputs.sha256') || !workflow.includes('EXPECTED_SOURCE_COMMIT=') ||
     !workflow.includes('git status --porcelain --untracked-files=all') ||

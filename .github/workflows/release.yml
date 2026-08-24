@@ -1,0 +1,118 @@
+name: Release
+
+# Publication is driven by an annotated tag, so the decision to release stays a
+# deliberate human act and the tag is the record of it.
+#
+# This workflow does not re-run the eight-cell compatibility matrix. That matrix
+# already pins one packed candidate by SHA-256 in
+# `.github/verification/task-967-matrix.json`, and the suite refuses to call a
+# pairing verified unless that digest still matches what `npm pack` produces at
+# the attested commit. So the release-specific question is narrow and exact: is
+# the tarball about to be published byte-identical to the one the matrix
+# attested? If it is not, nothing here publishes.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.repository == 'NoahWTeng/mempalace-for-pi'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.x
+      - name: Tag, manifest, and attested candidate agree
+        run: |
+          state="$(mktemp -d)"
+          trap 'rm -rf "$state"' EXIT
+          export HOME="$state/home" npm_config_cache="$state/npm-cache" NPM_CONFIG_USERCONFIG=/dev/null
+          mkdir -p "$HOME"
+
+          version="$(node -p 'require("./package.json").version')"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package version $version" >&2
+            exit 1
+          fi
+
+          npm ci --ignore-scripts
+          npm run check
+          npm test
+          npm run check:repository
+
+          # The published bytes must be the attested bytes. `npm test` already
+          # refuses stale matrix evidence; this states the same invariant in the
+          # release log, where a reader looking for it will actually find it.
+          candidate="$state/candidate"
+          mkdir -p "$candidate"
+          npm pack --pack-destination "$candidate"
+          packed="$(shasum -a 256 "$candidate"/*.tgz | awk '{print $1}')"
+          attested="$(node -p 'require("./.github/verification/task-967-matrix.json").candidateSha256')"
+          echo "packed   $packed"
+          echo "attested $attested"
+          if [ "$packed" != "$attested" ]; then
+            echo 'refusing to publish a candidate the matrix never attested' >&2
+            exit 1
+          fi
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Mints the short-lived OIDC token npm exchanges for a provenance
+      # attestation. This is why the release runs on a hosted runner: npm
+      # refuses to generate provenance from a self-hosted one, so the previous
+      # self-hosted CI could never have produced it.
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Publish with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo 'NPM_TOKEN secret is not configured; add it before tagging a release' >&2
+            exit 1
+          fi
+          npm ci --ignore-scripts
+          npm publish --provenance --access public
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Create the GitHub release from the tag and changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes="$(mktemp)"
+          {
+            echo "Published to npm as [\`mempalace-for-pi@$version\`](https://www.npmjs.com/package/mempalace-for-pi/v/$version) with provenance."
+            echo
+            echo "Attested candidate SHA-256: \`$(node -p 'require("./.github/verification/task-967-matrix.json").candidateSha256')\`"
+            echo
+            echo "See [CHANGELOG.md](CHANGELOG.md) and the [compatibility matrix](docs/public/compatibility.md)."
+          } > "$notes"
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file "$notes" --verify-tag

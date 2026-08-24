@@ -6,8 +6,10 @@ import { pathToFileURL } from 'node:url';
 export const PUBLIC_REPOSITORY_FILES = [
   '.github/verification/task-967-matrix.json',
   '.github/workflows/ci.yml',
+  '.github/workflows/release.yml',
   '.gitignore',
   'CHANGELOG.md',
+  'CONTRIBUTING.md',
   'LICENSE',
   'MIGRATION_PROVENANCE.md',
   'README.md',
