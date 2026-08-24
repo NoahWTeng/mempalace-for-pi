@@ -348,12 +348,17 @@ export function assertCutoverManifest(manifest) {
     for (const key of ['oldMain', 'cleanCommit', 'cleanTree', 'reviewedTree']) assert.match(manifest[key], OID);
     for (const key of ['bundleSha256', 'candidateSha256']) assert.match(manifest[key], SHA256);
     assert.equal(manifest.cleanTree, manifest.reviewedTree);
+    // The refs and pull requests the predecessor repository actually carried at
+    // the cutover. Both lists grew after this schema was first written, and a
+    // stale expectation here would pass a manifest that under-reports what was
+    // left behind — which is the one thing this record exists to state.
     assert.deepEqual(manifest.ownerControlledRefs, [
       'refs/heads/main',
       'refs/heads/feat/community-mempalace-pi',
       'refs/heads/feat/pi-lifecycle-adapter',
+      'refs/heads/feat/public-repo-sanitization',
     ]);
-    assert.deepEqual(manifest.pullRequests, [1, 2, 3, 4]);
+    assert.deepEqual(manifest.pullRequests, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
     assert(Array.isArray(manifest.tags));
     assert(Array.isArray(manifest.scanners) && manifest.scanners.length > 0);
     for (const scanner of manifest.scanners) {
@@ -368,10 +373,38 @@ export function assertCutoverManifest(manifest) {
   }
 }
 
-export function assertRemoteRefs(refs, cleanCommit) {
+// A release needs a tag, and a tag is a ref like any other: it is precisely how
+// a slice of the old history would come back to a public remote without any
+// branch showing it. So tags are permitted, but only the ones the manifest
+// declares and only pointing at the clean commit, and every other namespace —
+// `refs/pull`, `refs/notes`, anything a tool invents — stays forbidden outright.
+// An annotated tag publishes two lines, the tag object and its `^{}`
+// dereference; the dereferenced commit is what has to match.
+export function assertRemoteRefs(refs, cleanCommit, tags = []) {
   try {
     assert.match(cleanCommit, OID);
-    assert.deepEqual(refs, [{ oid: cleanCommit, ref: 'refs/heads/main' }]);
+    assert.deepEqual(
+      refs.filter(({ ref }) => ref.startsWith('refs/heads/')),
+      [{ oid: cleanCommit, ref: 'refs/heads/main' }],
+      'the remote carries a branch other than clean main',
+    );
+
+    const resolved = new Map();
+    for (const { oid, ref } of refs) {
+      if (!ref.startsWith('refs/tags/')) continue;
+      const name = ref.replace(/^refs\/tags\//u, '').replace(/\^\{\}$/u, '');
+      if (ref.endsWith('^{}') || !resolved.has(name)) resolved.set(name, oid);
+    }
+    assert.deepEqual([...resolved.keys()].sort(), [...tags].sort(), 'remote tags differ from the declared tags');
+    for (const [name, oid] of resolved) {
+      assert.equal(oid, cleanCommit, `refs/tags/${name} does not point at the clean commit`);
+    }
+
+    assert.deepEqual(
+      refs.filter(({ ref }) => !ref.startsWith('refs/heads/') && !ref.startsWith('refs/tags/')),
+      [],
+      'the remote carries refs outside heads and tags',
+    );
   } catch (error) {
     assert.fail(`remote refs differ from clean main: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -413,7 +446,7 @@ function main() {
 
   const refs = git('ls-remote', '--heads', '--tags', 'origin').split('\n').filter(Boolean)
     .map((line) => { const [oid, ref] = line.split(/\s+/u); return { oid, ref }; });
-  assertRemoteRefs(refs, manifest.cleanCommit);
+  assertRemoteRefs(refs, manifest.cleanCommit, manifest.tags);
   process.stdout.write('Public remote check: PASS\n');
 }
 

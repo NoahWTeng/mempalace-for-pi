@@ -121,8 +121,9 @@ function validManifest(overrides = {}) {
       'refs/heads/main',
       'refs/heads/feat/community-mempalace-pi',
       'refs/heads/feat/pi-lifecycle-adapter',
+      'refs/heads/feat/public-repo-sanitization',
     ],
-    pullRequests: [1, 2, 3, 4],
+    pullRequests: [1, 2, 3, 4, 5, 6, 7, 8, 9],
     tags: [],
     scanners: [
       { name: 'gitleaks', oldHistory: 'PASS', cleanHistory: 'PASS' },
@@ -433,6 +434,34 @@ test('remote refs accept only the clean main and reject stale branches or tags',
     [],
   ]) {
     assert.throws(() => assertRemoteRefs(refs, cleanCommit), /remote refs/u);
+  }
+
+  // A release tag is legitimate, but only when the manifest declares it and it
+  // points at the clean commit. Both halves matter: an undeclared tag is how
+  // old history returns unnoticed, and a declared tag aimed elsewhere is the
+  // same leak wearing an approved name.
+  const main = { oid: cleanCommit, ref: 'refs/heads/main' };
+  assert.doesNotThrow(() => assertRemoteRefs(
+    [main, { oid: cleanCommit, ref: 'refs/tags/v0.1.0' }],
+    cleanCommit,
+    ['v0.1.0'],
+  ));
+  // An annotated tag publishes the tag object and its dereference; the
+  // dereferenced commit is the one that has to match, not the tag object.
+  assert.doesNotThrow(() => assertRemoteRefs(
+    [main, { oid: '8'.repeat(40), ref: 'refs/tags/v0.1.0' }, { oid: cleanCommit, ref: 'refs/tags/v0.1.0^{}' }],
+    cleanCommit,
+    ['v0.1.0'],
+  ));
+  for (const [refs, tags] of [
+    [[main, { oid: '6'.repeat(40), ref: 'refs/tags/v0.1.0' }], ['v0.1.0']],
+    [[main, { oid: '6'.repeat(40), ref: 'refs/tags/v0.1.0' }, { oid: '6'.repeat(40), ref: 'refs/tags/v0.1.0^{}' }], ['v0.1.0']],
+    [[main, { oid: cleanCommit, ref: 'refs/tags/v0.2.0' }], ['v0.1.0']],
+    [[main], ['v0.1.0']],
+    // The namespace that survives every history rewrite and cannot be deleted.
+    [[main, { oid: '6'.repeat(40), ref: 'refs/pull/1/head' }], []],
+  ]) {
+    assert.throws(() => assertRemoteRefs(refs, cleanCommit, tags), /remote refs/u);
   }
 });
 
