@@ -96,7 +96,7 @@ test('the manifest publishes under exactly the intended identity', () => {
   const manifest = readManifest();
   assert.equal(manifest.private, undefined, 'a private manifest cannot be published');
   assert.equal(manifest.name, 'mempalace-for-pi');
-  assert.equal(manifest.version, '0.1.1');
+  assert.equal(manifest.version, '0.1.0');
   // Left undefined deliberately: an unscoped package already publishes publicly
   // to the default registry, so the only thing a publishConfig could do here is
   // redirect the release somewhere the reader is not expecting.

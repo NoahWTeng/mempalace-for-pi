@@ -14,12 +14,7 @@ export interface CompatibilityPairing {
   readonly verification: VerificationState;
 }
 
-/**
- * Pi releases the acceptance matrix actually exercised. This is the support
- * claim, not the install gate: the `package.json` peer range is deliberately
- * wider so a Pi minor release cannot block installation, and every Pi version
- * outside this list is unverified and unsupported.
- */
+/** Pi baseline the integration is written against (`package.json` peer range). */
 export const SUPPORTED_PI_VERSIONS = ['0.84.2'] as const;
 
 /**
