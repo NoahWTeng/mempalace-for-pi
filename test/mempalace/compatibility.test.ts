@@ -30,12 +30,45 @@ function loadCompatibility() {
   return import('../../integration/compatibility.ts');
 }
 
+// The digest of the tarball this tree produces right now. Extracted so the
+// binding below and the regressions that exercise it measure the candidate the
+// same way, rather than one of them approximating the other.
+function packCandidateDigest(): string {
+  const packedRoot = mkdtempSync(join(tmpdir(), 'mempalace-matrix-binding-'));
+  try {
+    const packed = spawnSync('npm', ['pack', '--json', '--pack-destination', packedRoot], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    assert.equal(packed.status, 0, packed.stderr);
+    const [{ filename }] = JSON.parse(packed.stdout);
+    return createHash('sha256').update(readFileSync(join(packedRoot, filename))).digest('hex');
+  } finally {
+    rmSync(packedRoot, { recursive: true, force: true });
+  }
+}
+
 // A recorded commit binds this checkout only when it is reachable *from* it.
 // A commit that merely resolves — because a sibling branch in the same object
 // store still holds it, or because it was cherry-picked and the original
 // survives — vanishes from a fresh single-branch clone, and the binding with
 // it. Reachability is therefore checked before anything is derived from it.
-function assertMatrixEvidenceBound(evidence: Record<string, any>): void {
+//
+// Which authority the rest of the binding answers to depends on whether the run
+// is *reading* the evidence or *regenerating* it. A matrix cell regenerates it:
+// the committed file describes the previous candidate by construction, so making
+// that file the authority meant no release could ever be attested — the cells
+// refused to pass until the evidence was refreshed, and refreshing it required
+// the cells to pass. CI already measures the candidate independently and hands
+// each cell the digest, so under that anchor the anchor decides and the
+// committed file is simply the output being replaced. A checkout supplies no
+// anchor and keeps the file as the authority, so stale evidence is still caught
+// where a human would write it. Publication is unaffected: `release.yml` checks
+// the tag's `npm pack` against the committed digest on its own.
+function assertMatrixEvidenceBound(
+  evidence: Record<string, any>,
+  env: Record<string, string | undefined> = process.env,
+): void {
   const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', String(evidence.sourceCommit), 'HEAD'], {
     cwd: root,
   });
@@ -45,36 +78,36 @@ function assertMatrixEvidenceBound(evidence: Record<string, any>): void {
     'matrix source commit is not an ancestor of the evidence commit',
   );
 
-  const packedRoot = mkdtempSync(join(tmpdir(), 'mempalace-matrix-binding-'));
-  try {
-    const packed = spawnSync('npm', ['pack', '--json', '--pack-destination', packedRoot], {
-      cwd: root,
-      encoding: 'utf8',
-    });
-    assert.equal(packed.status, 0, packed.stderr);
-    const [{ filename }] = JSON.parse(packed.stdout);
-    const candidateSha256 = createHash('sha256')
-      .update(readFileSync(join(packedRoot, filename)))
-      .digest('hex');
-    assert.equal(evidence.candidateSha256, candidateSha256, 'matrix candidate differs from npm pack');
+  const candidateSha256 = packCandidateDigest();
 
-    const tree = spawnSync('git', ['rev-parse', `${evidence.sourceCommit}^{tree}`], {
-      cwd: root,
-      encoding: 'utf8',
-    });
-    assert.equal(tree.status, 0, tree.stderr);
-    assert.equal(evidence.sourceTree, tree.stdout.trim(), 'matrix source tree differs from source commit');
-    const packedPaths = [
-      'package.json', 'integration', 'extensions/index.ts', 'docs/public',
-      'README.md', 'LICENSE', 'CHANGELOG.md', 'MIGRATION_PROVENANCE.md',
-    ];
-    const drift = spawnSync('git', ['diff', '--quiet', evidence.sourceCommit, 'HEAD', '--', ...packedPaths], {
-      cwd: root,
-    });
-    assert.equal(drift.status, 0, 'packed paths changed after matrix verification');
-  } finally {
-    rmSync(packedRoot, { recursive: true, force: true });
+  const anchor = env.EXPECTED_CANDIDATE_SHA256;
+  if (anchor) {
+    assert.equal(candidateSha256, anchor, 'packed candidate differs from the anchor CI measured');
+    const attesting = env.EXPECTED_SOURCE_COMMIT;
+    if (attesting) {
+      const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
+      assert.equal(head.status, 0, head.stderr);
+      assert.equal(head.stdout.trim(), attesting, 'tree under test is not the commit CI is attesting');
+    }
+    return;
   }
+
+  assert.equal(evidence.candidateSha256, candidateSha256, 'matrix candidate differs from npm pack');
+
+  const tree = spawnSync('git', ['rev-parse', `${evidence.sourceCommit}^{tree}`], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  assert.equal(tree.status, 0, tree.stderr);
+  assert.equal(evidence.sourceTree, tree.stdout.trim(), 'matrix source tree differs from source commit');
+  const packedPaths = [
+    'package.json', 'integration', 'extensions/index.ts', 'docs/public',
+    'README.md', 'LICENSE', 'CHANGELOG.md', 'MIGRATION_PROVENANCE.md',
+  ];
+  const drift = spawnSync('git', ['diff', '--quiet', evidence.sourceCommit, 'HEAD', '--', ...packedPaths], {
+    cwd: root,
+  });
+  assert.equal(drift.status, 0, 'packed paths changed after matrix verification');
 }
 
 test('the manifest carries the public integration identity', () => {
@@ -546,8 +579,12 @@ test('a pairing may only claim verification with complete SHA-bound matrix evide
   const evidencePath = join(root, '.github', 'verification', 'task-967-matrix.json');
   const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
   assertMatrixEvidenceBound(evidence);
+  // Pinned to an empty environment so these describe the unanchored contract
+  // whatever the surrounding run supplies. Inside a matrix cell the real
+  // environment carries an anchor, and asserting against it here would test the
+  // wrong branch — see the anchoring regression below.
   assert.throws(
-    () => assertMatrixEvidenceBound({ ...evidence, candidateSha256: '0'.repeat(64) }),
+    () => assertMatrixEvidenceBound({ ...evidence, candidateSha256: '0'.repeat(64) }, {}),
     /matrix candidate differs/u,
   );
 
@@ -569,7 +606,7 @@ test('a pairing may only claim verification with complete SHA-bound matrix evide
   });
   assert.equal(unreachable.status, 0, unreachable.stderr);
   assert.throws(
-    () => assertMatrixEvidenceBound({ ...evidence, sourceCommit: unreachable.stdout.trim() }),
+    () => assertMatrixEvidenceBound({ ...evidence, sourceCommit: unreachable.stdout.trim() }, {}),
     /not an ancestor/u,
   );
   assert.match(evidence.candidateSha256, /^[a-f0-9]{64}$/u);
@@ -584,6 +621,48 @@ test('a pairing may only claim verification with complete SHA-bound matrix evide
     cell.candidateSha256 === evidence.candidateSha256 && cell.sourceCommit === evidence.sourceCommit &&
     cell.sourceTree === evidence.sourceTree && cell.outcome === 'PASS'));
   assert.deepEqual(verified.map(({ mempalace }) => mempalace).sort(), ['3.6.0', '3.7.1']);
+});
+
+// Refreshing the attestation was impossible for any release that touched a packed
+// file. Each matrix cell runs this suite, this suite compared the committed
+// evidence against a live `npm pack`, and a release changes `package.json` by
+// definition — so every cell failed, the aggregation that would have refreshed
+// the evidence never ran, and the only way out was the evidence it refused to
+// produce. It went unseen because the file had never once been refreshed against
+// a changed candidate: of the two commits that touched it, neither changed a
+// packed file, and the third was the squashed initial commit where evidence and
+// package were born in the same tree.
+test('an attesting run binds the candidate to the anchor CI measured, not to the file it regenerates', () => {
+  const evidence = JSON.parse(readRepositoryFile('.github/verification/task-967-matrix.json'));
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
+  assert.equal(head.status, 0, head.stderr);
+  const commit = head.stdout.trim();
+  const digest = packCandidateDigest();
+
+  // What a cell sees mid-release: the committed evidence describes a candidate
+  // that no longer exists, while CI hands the cell the digest it measured from
+  // this very tree. The run is regenerating that file, so the file cannot also
+  // be the authority for it.
+  const superseded = { ...evidence, candidateSha256: '0'.repeat(64), sourceTree: '0'.repeat(40) };
+  assert.doesNotThrow(() => assertMatrixEvidenceBound(superseded, {
+    EXPECTED_CANDIDATE_SHA256: digest,
+    EXPECTED_SOURCE_COMMIT: commit,
+  }));
+
+  // The anchor is an authority, not a bypass. A tree that does not produce it is
+  // still refused, and so is a tree that is not the commit CI is attesting.
+  assert.throws(() => assertMatrixEvidenceBound(evidence, {
+    EXPECTED_CANDIDATE_SHA256: '0'.repeat(64),
+    EXPECTED_SOURCE_COMMIT: commit,
+  }), /differs from the anchor/u);
+  assert.throws(() => assertMatrixEvidenceBound(evidence, {
+    EXPECTED_CANDIDATE_SHA256: digest,
+    EXPECTED_SOURCE_COMMIT: '0'.repeat(40),
+  }), /not the commit/u);
+
+  // Without an anchor the committed file is still the authority, so a developer
+  // checkout keeps catching evidence that has gone stale.
+  assert.throws(() => assertMatrixEvidenceBound(superseded, {}), /matrix candidate differs/u);
 });
 
 test('the licence attributes the migrated integration and disclaims MemPalace core', () => {
