@@ -36,6 +36,7 @@ export const PUBLIC_REPOSITORY_FILES = [
   'package-lock.json',
   'package.json',
   'scripts/acceptance-extension.mjs',
+  'scripts/aggregate-matrix-evidence.mjs',
   'scripts/check-package.mjs',
   'scripts/check-public-repository.mjs',
   'scripts/gate-ci.sh',

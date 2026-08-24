@@ -216,6 +216,64 @@ test('the release gate checks version consistency without pinning a version', ()
   assert.match(consistency, /lock\.packages\[''\]\.version !== pkg\.version/u, 'the lock root entry must still agree');
 });
 
+// The eight cells each measured one pairing and then nothing joined them up:
+// the records were printed to a log the runner discarded, so refreshing the
+// committed evidence meant re-running the whole matrix locally and assembling
+// the file by hand. A manual step over evidence is exactly where a hand-written
+// digest gets in, so the wiring that carries a record from the cell that
+// measured it to the file the release gate reads is asserted here rather than
+// left to a gate that only runs on a dispatch.
+test('every matrix cell persists and uploads the record it measured', () => {
+  const workflow = readRepositoryFile('.github/workflows/ci.yml');
+  for (const [job, persists] of [
+    ['macos-arm64', 'MEMPALACE_MATRIX_EVIDENCE='],
+    ['linux-arm64', '--evidence'],
+  ] as const) {
+    const body = workflow.split(`\n  ${job}:\n`)[1]?.split(/\n  [a-z0-9-]+:\n/u)[0];
+    assert.ok(body, `matrix job not found: ${job}`);
+    assert.ok(body.includes(persists), `${job} does not persist its matrix record`);
+    assert.match(body, /name: matrix-evidence-/u, `${job} does not upload its matrix record`);
+    // A cell that passes while writing nothing would aggregate as an absent
+    // cell, which reads as a smaller matrix rather than as a broken one.
+    assert.match(
+      body,
+      /test -s "\$RUNNER_TEMP\/matrix-evidence\.jsonl"|test -s "\$MEMPALACE_MATRIX_EVIDENCE"/u,
+      `${job} does not fail when its record is empty`,
+    );
+  }
+  assert.match(workflow, /aggregate-matrix-evidence\.mjs/u, 'per-cell records are never aggregated');
+  // Committing from CI would need `contents: write` in a workflow that also runs
+  // fork pull requests. The aggregate is published for a human to commit.
+  assert.doesNotMatch(workflow, /git (?:commit|push)/u, 'CI must not write to the repository');
+});
+
+// The aggregator decides nothing: it copies measured fields and refuses to write
+// unless the records are complete. The size it enforces therefore has to come
+// from the declared support surface rather than a number typed into the script —
+// a hard-coded cell count would keep the old matrix size after the surface grew,
+// which is the defect that pinned the release gate to one version forever.
+test('the aggregator derives its expected cells from the declared surface', () => {
+  const aggregator = readRepositoryFile('scripts/aggregate-matrix-evidence.mjs');
+  assert.match(aggregator, /compatibility\.ts/u, 'the aggregator ignores the declared surface');
+  // Comparing a length against zero is an emptiness guard and is wanted. What
+  // must not appear is a comparison against a specific expected size, which is
+  // the form that silently keeps the old matrix after the surface grows.
+  assert.deepEqual(
+    [...aggregator.matchAll(/\.length\s*[!=]==?\s*([1-9]\d*)/gu)].map(([match]) => match),
+    [],
+    'the aggregator pins a cell count instead of deriving it',
+  );
+  for (const refusal of [
+    'ran without EXPECTED_NODE_VERSION',
+    'reports outcome',
+    'ran against a different',
+    'no record for declared cell',
+    'duplicate cell',
+  ]) {
+    assert.ok(aggregator.includes(refusal), `the aggregator lost its "${refusal}" refusal`);
+  }
+});
+
 test('the Linux Docker gate uses init to reap exited grandchildren', () => {
   const linuxRun = readRepositoryFile('scripts/gate-ci.sh').match(/docker run --rm[^\n]*--platform linux\/arm64/u)?.[0];
   assert.ok(linuxRun, 'the Linux Docker gate must run the pinned ARM64 container');
@@ -236,6 +294,7 @@ const ACTIVE_VERIFICATION_SOURCES = [
   'scripts/gate-core.sh',
   'scripts/gate-packaged.sh',
   'scripts/gate-ci.sh',
+  'scripts/aggregate-matrix-evidence.mjs',
   '.github/workflows/ci.yml',
   '.github/workflows/release.yml',
 ];

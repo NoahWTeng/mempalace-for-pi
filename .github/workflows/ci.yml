@@ -143,6 +143,10 @@ jobs:
             npm_config_cache="$state/npm-cache" NPM_CONFIG_USERCONFIG=/dev/null
           export EXPECTED_PLATFORM=darwin EXPECTED_ARCH=arm64 \
             EXPECTED_NODE_VERSION="${{ matrix.node-version }}" EXPECTED_SOURCE_COMMIT="${{ github.sha }}"
+          # Outside "$state": the trap above deletes that directory when the
+          # step ends, and the record has to outlive the step to be uploaded.
+          export MEMPALACE_MATRIX_EVIDENCE="$RUNNER_TEMP/matrix-evidence.jsonl"
+          : > "$MEMPALACE_MATRIX_EVIDENCE"
           mkdir -p "$HOME" "$PI_CODING_AGENT_DIR"
           npm ci --ignore-scripts
           test "$(node_modules/.bin/pi --version)" = "${{ matrix.pi-version }}"
@@ -151,6 +155,15 @@ jobs:
             bash scripts/gate-release.sh \
               --tarball "$RUNNER_TEMP/release-candidate/mempalace-for-pi-0.1.0.tgz" \
               --mempalace-version "${{ matrix.mempalace-version }}"
+          # A cell that passes but leaves no record cannot be aggregated, and a
+          # matrix assembled from fewer cells than were run is the failure this
+          # whole path exists to prevent. Fail here, where the cause is visible.
+          test -s "$MEMPALACE_MATRIX_EVIDENCE"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: matrix-evidence-darwin-${{ matrix.node-version }}-${{ matrix.mempalace-version }}
+          path: ${{ runner.temp }}/matrix-evidence.jsonl
+          if-no-files-found: error
 
   # `ubuntu-24.04-arm` is arm64 hardware, so the digest-pinned ARM64 container
   # `gate-ci.sh` starts runs natively instead of under emulation. The container
@@ -200,4 +213,68 @@ jobs:
             --mempalace-version "${{ matrix.mempalace-version }}" \
             --tarball "$RUNNER_TEMP/release-candidate/mempalace-for-pi-0.1.0.tgz" \
             --sha256 "${{ needs.candidate.outputs.sha256 }}" \
-            --commit "${{ github.sha }}"
+            --commit "${{ github.sha }}" \
+            --evidence "$RUNNER_TEMP/matrix-evidence.jsonl"
+          test -s "$RUNNER_TEMP/matrix-evidence.jsonl"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: matrix-evidence-linux-${{ matrix.node-version }}-${{ matrix.mempalace-version }}
+          path: ${{ runner.temp }}/matrix-evidence.jsonl
+          if-no-files-found: error
+
+  # Joins the per-cell records into the file the release gate reads. This is the
+  # step that used to be missing: the cells measured, printed, and then their
+  # records died with the runner, so refreshing
+  # `.github/verification/task-967-matrix.json` meant re-running everything
+  # locally and assembling it by hand — which is exactly where a hand-written
+  # digest gets into evidence.
+  #
+  # It deliberately does not commit. Writing to the repository would need
+  # `contents: write`, and this workflow runs the full suite on fork pull
+  # requests; the aggregate is published as an artifact for a human to download
+  # and commit, which keeps CI read-only. Staleness is reported here and
+  # *enforced* by `release.yml`, which refuses to publish a candidate the matrix
+  # never attested.
+  matrix-evidence:
+    needs: [macos-arm64, linux-arm64]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.x
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: matrix-evidence-*
+          path: ${{ runner.temp }}/records
+      - id: aggregate
+        run: |
+          set -euo pipefail
+          node scripts/aggregate-matrix-evidence.mjs \
+            --records "$RUNNER_TEMP/records" \
+            --out "$RUNNER_TEMP/task-967-matrix.json"
+          committed=.github/verification/task-967-matrix.json
+          if node scripts/aggregate-matrix-evidence.mjs \
+               --records "$RUNNER_TEMP/records" --check "$committed"; then
+            {
+              echo "### Matrix evidence is current"
+              echo
+              echo "The committed evidence already describes this run. Nothing to commit."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Matrix evidence is stale"
+              echo
+              echo "This run measured a candidate the committed evidence does not describe."
+              echo "Download the task-967-matrix artifact and commit it to"
+              echo "$committed before tagging a release."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: task-967-matrix
+          path: ${{ runner.temp }}/task-967-matrix.json
+          if-no-files-found: error

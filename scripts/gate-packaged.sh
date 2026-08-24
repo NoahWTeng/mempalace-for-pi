@@ -445,8 +445,18 @@ SH
   if [[ -n "${EXPECTED_NODE_VERSION:-}" ]]; then
     [[ "$EXPECTED_NODE_VERSION" == '24.x' && "$actual_node" == v24.* || "$actual_node" == "v$EXPECTED_NODE_VERSION" ]]
   fi
-  matrix_evidence="$(node -e 'process.stdout.write(JSON.stringify({candidateSha256:process.argv[1],sourceCommit:process.argv[2],sourceTree:process.argv[3],platform:process.argv[4],arch:process.argv[5],node:process.argv[6],pi:process.argv[7],core:process.argv[8],recordsBefore:Number(process.argv[9]),recordsAfter:Number(process.argv[10]),retainedPercent:Number(process.argv[11]),networkAttempts:0,syntheticPredecessor:true,lifecycle:["pi-install","pi-list","disable","pi-remove","zero-tools","reinstall","synthetic-predecessor","upgrade","rollback","current-restore","project-local-install","project-json-palace","restart","env-override","project-json-disabled","project-json-invalid","untrusted-json-unread","project-remove","project-reinstall"]}))' \
-    "$candidate_sha" "$source_commit" "$source_tree" "$actual_platform" "$actual_arch" "$actual_node" "$PI_VERSION" "$version" "$records_before" "$records_after" "$retained_percent")"
+  # `nodeDeclared` is the version this cell was *asked* to be, which is not
+  # recoverable from the runtime version: `24.x` and `24.15.0` both run as
+  # `v24.15.0`. The aggregator needs the declared value to place a record in the
+  # matrix, and a cell that reports what it was asked is evidence, whereas an
+  # aggregator inferring it from a version prefix is a guess wearing the same
+  # field name. A cell run without EXPECTED_NODE_VERSION records an empty
+  # string, and the aggregator refuses it rather than labelling it itself.
+  # `outcome` is literal here and still measured: this line is only reached
+  # after every assertion above, so the control flow is the measurement. The
+  # aggregator copies the field rather than deciding a verdict of its own.
+  matrix_evidence="$(node -e 'process.stdout.write(JSON.stringify({candidateSha256:process.argv[1],sourceCommit:process.argv[2],sourceTree:process.argv[3],platform:process.argv[4],arch:process.argv[5],node:process.argv[6],nodeDeclared:process.argv[12],pi:process.argv[7],core:process.argv[8],outcome:"PASS",recordsBefore:Number(process.argv[9]),recordsAfter:Number(process.argv[10]),retainedPercent:Number(process.argv[11]),networkAttempts:0,syntheticPredecessor:true,lifecycle:["pi-install","pi-list","disable","pi-remove","zero-tools","reinstall","synthetic-predecessor","upgrade","rollback","current-restore","project-local-install","project-json-palace","restart","env-override","project-json-disabled","project-json-invalid","untrusted-json-unread","project-remove","project-reinstall"]}))' \
+    "$candidate_sha" "$source_commit" "$source_tree" "$actual_platform" "$actual_arch" "$actual_node" "$PI_VERSION" "$version" "$records_before" "$records_after" "$retained_percent" "${EXPECTED_NODE_VERSION:-}")"
   printf '%s\n' "$matrix_evidence"
   [[ -z "${MEMPALACE_MATRIX_EVIDENCE:-}" ]] || printf '%s\n' "$matrix_evidence" >> "$MEMPALACE_MATRIX_EVIDENCE"
   printf 'Packaged matrix: PASS Pi %s + MemPalace %s (install=%ss, records=%s/%s, network=0)\n' \

@@ -27,7 +27,8 @@ the path.
 | --- | --- | --- |
 | `ci.yml` → `quick` | every push and pull request | Types, the full suite, and the repository boundary. This is the check that blocks a merge. |
 | `ci.yml` → `candidate` | push to `main`, manual | Packs the candidate, asserts the tree is clean and matches the commit, and uploads the tarball. |
-| `ci.yml` → `macos-arm64`, `linux-arm64` | manual only | The eight-cell compatibility matrix. Each cell installs a real core and drives Pi's whole package lifecycle, so it costs roughly half an hour. |
+| `ci.yml` → `macos-arm64`, `linux-arm64` | manual only | The eight-cell compatibility matrix. Each cell installs a real core, drives Pi's whole package lifecycle, and uploads the record it measured. |
+| `ci.yml` → `matrix-evidence` | manual only | Joins the per-cell records into `task-967-matrix.json` and publishes it as an artifact. |
 | `release.yml` | pushing a `v*` tag | Verifies, publishes to npm with provenance, and opens the GitHub release. |
 
 Every job runs on a GitHub-hosted runner. That is not incidental:
@@ -45,8 +46,19 @@ being tagged.
 
 1. **Land the change.** Any edit to a packed file invalidates the current matrix;
    `npm test` will say so.
-2. **Re-attest.** Run the CI workflow manually (`workflow_dispatch`) and commit
-   the refreshed `.github/verification/task-967-matrix.json`.
+2. **Re-attest.** Run the CI workflow manually (`workflow_dispatch`). The job
+   summary reports whether the committed evidence is current; when it is stale,
+   download the aggregate and commit it:
+
+   ```bash
+   gh run download <run-id> --name task-967-matrix --dir .github/verification
+   ```
+
+   CI never commits it itself. Doing so would need `contents: write` in a
+   workflow that also runs fork pull requests, and the aggregator is the only
+   thing that writes that file — every field in it is copied from a record a
+   real gate run produced, and it refuses to write at all unless the records are
+   complete, agree on one candidate, and cover the declared support surface.
 3. **Bump and tag.**
 
    ```bash

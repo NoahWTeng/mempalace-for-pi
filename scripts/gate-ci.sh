@@ -107,6 +107,32 @@ if (!workflow.includes('needs.candidate.outputs.sha256') || !workflow.includes('
 if ((gate.match(/node@sha256:[a-f0-9]{64}/g) ?? []).length !== 2) {
   throw new Error('Linux Node images must be digest-pinned');
 }
+
+// Each cell must persist the record it measured, and the records must be joined
+// into the committed evidence. Without this the cells printed their findings to
+// a log that was discarded, and refreshing the matrix meant re-running the whole
+// thing locally and assembling the file by hand — a manual step over evidence,
+// which is precisely where a hand-written digest gets in.
+for (const [job, emits] of [
+  ['macos-arm64', 'MEMPALACE_MATRIX_EVIDENCE='],
+  ['linux-arm64', '--evidence'],
+]) {
+  const body = workflow.split(`\n  ${job}:\n`)[1]?.split(/\n  [a-z0-9-]+:\n/)[0];
+  if (!body) throw new Error(`matrix job not found: ${job}`);
+  if (!body.includes(emits)) throw new Error(`${job} does not persist its matrix record`);
+  if (!body.includes('name: matrix-evidence-')) {
+    throw new Error(`${job} does not upload its matrix record`);
+  }
+}
+if (!workflow.includes('aggregate-matrix-evidence.mjs')) {
+  throw new Error('per-cell records are never aggregated into committed evidence');
+}
+// The aggregate is published for a human to commit. Committing from CI would
+// need `contents: write` in a workflow that also runs fork pull requests, which
+// is a much larger grant than refreshing one evidence file is worth.
+if (/git (?:commit|push)/u.test(workflow)) {
+  throw new Error('CI must not write to the repository; publish the evidence as an artifact');
+}
 const macos_arm64_job = workflow.split('macos-arm64:')[1]?.split('linux-arm64:')[0];
 if (!macos_arm64_job) throw new Error('macos-arm64 job not found');
 if (!macos_arm64_job.includes('npm ci --ignore-scripts')) {
@@ -119,6 +145,7 @@ mempalace_version=""
 tarball=""
 expected_sha=""
 source_commit=""
+evidence_path=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --linux) linux_version="${2:-}"; shift 2 ;;
@@ -126,12 +153,24 @@ while [[ $# -gt 0 ]]; do
     --tarball) tarball="${2:-}"; shift 2 ;;
     --sha256) expected_sha="${2:-}"; shift 2 ;;
     --commit) source_commit="${2:-}"; shift 2 ;;
+    # Where to leave this cell's matrix record on the host. The gate runs the
+    # measurement inside a container, so without an explicit path the record
+    # dies with the container and the committed matrix has to be assembled by
+    # hand.
+    --evidence)
+      [[ -n "${2:-}" ]] || { echo '--evidence requires a path' >&2; exit 2; }
+      evidence_path="$(node -e 'process.stdout.write(require("node:path").resolve(process.argv[1]))' "$2")"
+      shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
 root="$PWD"
 tmp="$(mktemp -d)"
+evidence_dir="$tmp/evidence"
+mkdir -p "$evidence_dir"
+chmod 777 "$evidence_dir"
+[[ -z "$evidence_path" ]] || : > "$evidence_path"
 uv_container=""
 trap '[[ -z "$uv_container" ]] || docker rm -f "$uv_container" >/dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
 
@@ -174,19 +213,32 @@ if (evidence.verdict !== 'BLOCKED' || !evidence.error?.includes('SHA-256 differs
 NODE
 
 run_linux() {
-  local version="$1" image expected_node
+  local version="$1" image expected_node cell_evidence
   case "$version" in
     22.19.0) image='node@sha256:afff6d8c97964a438d2e6a9c96509367e45d8bf93f790ad561a1eaea926303d9'; expected_node='v22.19.0' ;;
     24.x) image='node@sha256:934240a162082fd8b8a2f90cd5114446443f1eba1c5378f6687167ca405e6584'; expected_node='v24.' ;;
     *) echo "unsupported Linux Node version: $version" >&2; return 2 ;;
   esac
+  # World-writable on purpose. The container runs as root but with --cap-drop
+  # ALL, so it has no CAP_DAC_OVERRIDE and is subject to ordinary permission
+  # checks against a directory the host user owns: on a native Linux host, root
+  # would be "other" on a 755 directory and could not write the record. Docker
+  # Desktop on macOS maps ownership across the bind mount and hides this, which
+  # is the same blind spot that made the tar chown failure invisible locally.
+  # Opening the directory keeps the capability restriction intact rather than
+  # handing CAP_DAC_OVERRIDE back to satisfy one append.
+  cell_evidence="$evidence_dir/linux-$version.jsonl"
+  : > "$cell_evidence"
+  chmod 666 "$cell_evidence"
   docker run --rm --init --platform linux/arm64 --cap-drop ALL --security-opt no-new-privileges \
     -e EXPECTED_CANDIDATE_SHA256="$expected_sha" -e MATRIX_SOURCE_COMMIT="$source_commit" \
     -e EXPECTED_PLATFORM=linux -e EXPECTED_ARCH=arm64 -e EXPECTED_NODE_VERSION="$version" \
     -e EXPECTED_NODE="$expected_node" -e MEMPALACE_ACCEPTANCE_VERSION="$mempalace_version" \
+    -e MEMPALACE_MATRIX_EVIDENCE=/evidence/cell.jsonl \
     -v "$root:/source:ro" \
     -v "$tarball:/candidate/mempalace-for-pi-0.1.0.tgz:ro" \
     -v "$tmp/uv:/usr/local/bin/uv:ro" \
+    -v "$cell_evidence:/evidence/cell.jsonl" \
     "$image" bash -lc '
       set -euo pipefail
       [[ "$(uname -m)" == "aarch64" ]]
@@ -214,6 +266,17 @@ run_linux() {
       fi
       bash scripts/gate-release.sh "${release_args[@]}"
     '
+
+  # A cell that passes without leaving a record is not evidence anybody can
+  # aggregate, so treat the silence as a failure rather than discovering the
+  # gap later when the matrix comes up short.
+  [[ -s "$cell_evidence" ]] || {
+    echo "linux $version produced no matrix record" >&2
+    return 1
+  }
+  if [[ -n "$evidence_path" ]]; then
+    cat "$cell_evidence" >> "$evidence_path"
+  fi
 }
 
 if [[ -n "$linux_version" ]]; then
