@@ -64,10 +64,14 @@ being tagged.
    thing that writes that file — every field in it is copied from a record a
    real gate run produced, and it refuses to write at all unless the records are
    complete, agree on one candidate, and cover the declared support surface.
-3. **Bump and tag.**
+3. **Bump and tag.** Bump first, without a tag, so the tag can point at the tree
+   whose evidence was refreshed in step 2 — `npm version` on its own commits and
+   tags in one step, which would pin the tag to the pre-attestation commit.
 
    ```bash
-   npm version patch      # updates package.json, package-lock.json, and tags
+   npm version patch --no-git-tag-version
+   # update the literal tarball names in ci.yml and gate-ci.sh, then commit
+   git tag -a "v$(node -p 'require("./package.json").version')" -m "..."
    git push --follow-tags
    ```
 
@@ -77,9 +81,16 @@ digest, then publishes with a
 [provenance attestation](https://docs.npmjs.com/generating-provenance-statements)
 and opens the GitHub release.
 
-Publishing needs an `NPM_TOKEN` repository secret — an npm automation token, or a
-granular token scoped to write this one package. Without it the publish job stops
-with an explicit message rather than failing obscurely.
+Publishing carries no repository secret. The package is published through a
+[trusted publisher](https://docs.npmjs.com/trusted-publishers/) — npm exchanges
+the workflow's OIDC token for a short-lived publish credential, which is why the
+job needs `id-token: write` and a GitHub-hosted runner.
+
+Do not add `NODE_AUTH_TOKEN` back to the publish step. npm authenticates with a
+stored credential whenever one is present and only falls back to OIDC when none
+is, so supplying a token silently opts the job out of trusted publishing — and
+if the account requires a one-time password on token writes, the publish then
+fails with `EOTP`, which no unattended runner can answer.
 
 Version numbers are chosen by hand. One package and one maintainer do not need a
 release-automation tool to decide what `npm version patch` already decides.

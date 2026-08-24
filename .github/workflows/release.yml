@@ -67,9 +67,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Mints the short-lived OIDC token npm exchanges for a provenance
-      # attestation. This is why the release runs on a hosted runner: npm
-      # refuses to generate provenance from a self-hosted one, so the previous
+      # Mints the short-lived OIDC token npm exchanges both for the publish
+      # credential (trusted publishing) and for the provenance attestation.
+      # This is why the release runs on a hosted runner: npm refuses to
+      # generate provenance from a self-hosted one, so the previous
       # self-hosted CI could never have produced it.
       id-token: write
     steps:
@@ -81,14 +82,14 @@ jobs:
           node-version: 24.x
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      # No token is supplied on purpose. npm authenticates with a stored
+      # credential whenever one is present and only falls back to OIDC when
+      # none is, so passing `NODE_AUTH_TOKEN` silently opted this job out of
+      # the trusted publisher configured for the package — and the account
+      # requires a one-time password on token writes, which no unattended
+      # runner can answer. Removing it is what turns trusted publishing on.
       - name: Publish with provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo 'NPM_TOKEN secret is not configured; add it before tagging a release' >&2
-            exit 1
-          fi
           npm ci --ignore-scripts
           npm publish --provenance --access public
 
