@@ -260,6 +260,23 @@ test('the release gate checks version consistency without pinning a version', ()
     'the evidence gate must not compare the package version against a literal',
   );
   assert.match(evidenceGate, /lockJson\.version, packageJson\.version/u, 'lock and manifest must still agree');
+
+  // A fourth copy lived past the marker above, in the block that inspects the
+  // recorded evidence, so scoping the first assertion to the consistency block
+  // hid it — correctly, since the fixtures down there quote versions on purpose.
+  // This one is matched by its subject rather than its position: a comparison of
+  // the candidate's version against a literal is always the defect, and a JSON
+  // fixture that merely contains a version string is never it.
+  assert.deepEqual(
+    [...gate.matchAll(/evidence\.candidate\.version\s*!==\s*'\d+\.\d+\.\d+'/gu)].map(([match]) => match),
+    [],
+    'the release gate must not compare the recorded candidate version against a literal',
+  );
+  assert.match(
+    gate,
+    /evidence\.candidate\.version !== manifest\.version/u,
+    'the recorded candidate must still be required to name the manifest version',
+  );
 });
 
 // The eight cells each measured one pairing and then nothing joined them up:
@@ -275,7 +292,7 @@ test('every matrix cell persists and uploads the record it measured', () => {
     ['macos-arm64', 'MEMPALACE_MATRIX_EVIDENCE='],
     ['linux-arm64', '--evidence'],
   ] as const) {
-    const body = workflow.split(`\n  ${job}:\n`)[1]?.split(/\n  [a-z0-9-]+:\n/u)[0];
+    const body = workflow.split(`\n  ${job}:\n`)[1]?.split(/\n {2}[a-z0-9-]+:\n/u)[0];
     assert.ok(body, `matrix job not found: ${job}`);
     assert.ok(body.includes(persists), `${job} does not persist its matrix record`);
     assert.match(body, /name: matrix-evidence-/u, `${job} does not upload its matrix record`);

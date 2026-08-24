@@ -102,8 +102,13 @@ const files = fs.readdirSync(directory).filter((file) => file.endsWith('.json'))
 if (files.length !== 1) throw new Error(`expected one PASS evidence file, found ${files.length}`);
 const evidence = JSON.parse(fs.readFileSync(path.join(directory, files[0]), 'utf8'));
 if (evidence.verdict !== 'PASS') throw new Error('release evidence did not pass');
-if (evidence.candidate.version !== '0.1.0' || !/^[a-f0-9]{64}$/.test(evidence.candidate.sha256)) {
-  throw new Error('candidate identity is incomplete');
+// Derived from the manifest, not pinned. The rule is that the evidence names the
+// candidate this workspace actually builds; a literal turns every version bump
+// into a false "identity is incomplete", which is the same defect already fixed
+// in the consistency block above and in `release-gate.mjs`.
+const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+if (evidence.candidate.version !== manifest.version || !/^[a-f0-9]{64}$/.test(evidence.candidate.sha256)) {
+  throw new Error(`candidate identity is incomplete: evidence ${evidence.candidate.version}, manifest ${manifest.version}`);
 }
 if (!evidence.environment.node || !evidence.environment.pi || !evidence.environment.platform || !evidence.environment.arch) {
   throw new Error('environment evidence is incomplete');
