@@ -100,7 +100,7 @@ Continue with non-sensitive test content: save one finding, search for it, write
 | `palace_diary` | Read or write a bounded agent diary entry. |
 | `palace_status` | Inspect core, palace, and drawer status. |
 
-No additional public tool or slash command is registered.
+One slash command is registered: `/palace-explore` opens a read-only browser view of this project's memory on `127.0.0.1`, authorized per session and unable to write. See the [memory explorer](docs/public/memory-explorer.md). No other public tool or slash command is registered.
 
 ## Safety controls
 
@@ -150,6 +150,7 @@ This is an exhaustive support matrix—not a minimum-version promise. See [compa
 | --- | --- |
 | [Installation](docs/public/install.md) | Prerequisites, verified setup, and first use. |
 | [Configuration](docs/public/configuration.md) | Environment controls, project identity, worktrees, and write policy. |
+| [Memory explorer](docs/public/memory-explorer.md) | `/palace-explore`, its read-only boundary, and its acceptance evidence. |
 | [Privacy](docs/public/privacy.md) | Storage, networking, non-retention, and credential boundaries. |
 | [Migration](docs/public/migration.md) | Existing palaces, disable, removal, reinstall, upgrade, and rollback. |
 | [Troubleshooting](docs/public/troubleshooting.md) | Missing core, timeouts, permissions, compatibility, and cleanup. |

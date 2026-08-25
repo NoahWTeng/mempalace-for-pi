@@ -1,0 +1,404 @@
+{
+  "evidence": "synthetic-reference",
+  "notice": "Synthetic reference data for verifying the study validator. These attempts were generated deterministically and are not a recording of real developers; no SC-001 claim rests on this file.",
+  "journey": "search -> select -> details -> neighborhood",
+  "requirements": {
+    "participants": 10,
+    "attemptsPerParticipant": 3,
+    "attempts": 30,
+    "completeThreshold": 27,
+    "journeySeconds": 30
+  },
+  "attempts": [
+    {
+      "participant": "D01",
+      "attempt": 1,
+      "seed": "synthetic-seed-01",
+      "completed": true,
+      "seconds": 18.4,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D01",
+      "attempt": 2,
+      "seed": "synthetic-seed-02",
+      "completed": true,
+      "seconds": 21.7,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D01",
+      "attempt": 3,
+      "seed": "synthetic-seed-03",
+      "completed": true,
+      "seconds": 16.2,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D02",
+      "attempt": 1,
+      "seed": "synthetic-seed-04",
+      "completed": true,
+      "seconds": 24.9,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D02",
+      "attempt": 2,
+      "seed": "synthetic-seed-05",
+      "completed": true,
+      "seconds": 19.3,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D02",
+      "attempt": 3,
+      "seed": "synthetic-seed-06",
+      "completed": true,
+      "seconds": 22.8,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D03",
+      "attempt": 1,
+      "seed": "synthetic-seed-07",
+      "completed": true,
+      "seconds": 15.6,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D03",
+      "attempt": 2,
+      "seed": "synthetic-seed-08",
+      "completed": true,
+      "seconds": 27.4,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D03",
+      "attempt": 3,
+      "seed": "synthetic-seed-09",
+      "completed": true,
+      "seconds": 20.1,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D04",
+      "attempt": 1,
+      "seed": "synthetic-seed-10",
+      "completed": true,
+      "seconds": 23.5,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D04",
+      "attempt": 2,
+      "seed": "synthetic-seed-11",
+      "completed": true,
+      "seconds": 17.8,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D04",
+      "attempt": 3,
+      "seed": "synthetic-seed-12",
+      "completed": true,
+      "seconds": 25.2,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D05",
+      "attempt": 1,
+      "seed": "synthetic-seed-13",
+      "completed": true,
+      "seconds": 19.9,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D05",
+      "attempt": 2,
+      "seed": "synthetic-seed-14",
+      "completed": true,
+      "seconds": 28.6,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D05",
+      "attempt": 3,
+      "seed": "synthetic-seed-15",
+      "completed": true,
+      "seconds": 21.2,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D06",
+      "attempt": 1,
+      "seed": "synthetic-seed-16",
+      "completed": true,
+      "seconds": 16.9,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D06",
+      "attempt": 2,
+      "seed": "synthetic-seed-17",
+      "completed": true,
+      "seconds": 26.3,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D06",
+      "attempt": 3,
+      "seed": "synthetic-seed-18",
+      "completed": true,
+      "seconds": 22.4,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D07",
+      "attempt": 1,
+      "seed": "synthetic-seed-19",
+      "completed": true,
+      "seconds": 18.7,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D07",
+      "attempt": 2,
+      "seed": "synthetic-seed-20",
+      "completed": true,
+      "seconds": 24.1,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D07",
+      "attempt": 3,
+      "seed": "synthetic-seed-21",
+      "completed": true,
+      "seconds": 20.6,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D08",
+      "attempt": 1,
+      "seed": "synthetic-seed-22",
+      "completed": false,
+      "seconds": 33.8,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D08",
+      "attempt": 2,
+      "seed": "synthetic-seed-23",
+      "completed": true,
+      "seconds": 17.3,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D08",
+      "attempt": 3,
+      "seed": "synthetic-seed-24",
+      "completed": true,
+      "seconds": 23.9,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D09",
+      "attempt": 1,
+      "seed": "synthetic-seed-25",
+      "completed": true,
+      "seconds": 26.8,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D09",
+      "attempt": 2,
+      "seed": "synthetic-seed-26",
+      "completed": false,
+      "seconds": 19.1,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D09",
+      "attempt": 3,
+      "seed": "synthetic-seed-27",
+      "completed": true,
+      "seconds": 21.5,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D10",
+      "attempt": 1,
+      "seed": "synthetic-seed-28",
+      "completed": true,
+      "seconds": 25.7,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D10",
+      "attempt": 2,
+      "seed": "synthetic-seed-29",
+      "completed": true,
+      "seconds": 18.2,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    },
+    {
+      "participant": "D10",
+      "attempt": 3,
+      "seed": "synthetic-seed-30",
+      "completed": true,
+      "seconds": 22,
+      "steps": [
+        "search",
+        "select",
+        "details",
+        "neighborhood"
+      ]
+    }
+  ]
+}

@@ -38,8 +38,9 @@
     "release:evidence": "node scripts/release-gate.mjs --runs 3",
     "test": "node --test --test-concurrency=1 --experimental-strip-types test/mempalace/*.test.ts test/mempalace/*.test.mjs",
     "test:integration": "node --test --experimental-strip-types test/mempalace/*.test.ts",
+    "test:explorer": "node scripts/acceptance-explorer.mjs",
     "test:package-boundary": "node --test test/mempalace/package-boundary.test.mjs",
-    "test:packaged": "bash scripts/gate-packaged.sh"
+    "test:packaged": "bash scripts/gate-packaged.sh && node scripts/acceptance-extension.mjs --explorer"
   },
   "pi": {
     "extensions": [

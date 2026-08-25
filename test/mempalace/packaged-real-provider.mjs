@@ -39,12 +39,15 @@ assert.equal(typeof register, 'function');
 function host() {
   const handlers = new Map();
   const tools = [];
+  const commands = [];
   return {
     handlers,
     tools,
+    commands,
     pi: {
       on(name, handler) { handlers.set(name, [...(handlers.get(name) ?? []), handler]); },
       registerTool(tool) { tools.push(tool); },
+      registerCommand(name, command) { commands.push({ name, command }); },
     },
   };
 }
@@ -95,6 +98,8 @@ assert.equal(handle.active, true, 'a trusted session start did not compose the r
 assert.deepEqual(loaded.tools.map(({ name }) => name).sort(), [
   'palace_diary', 'palace_save', 'palace_search', 'palace_status',
 ]);
+assert.deepEqual(loaded.commands.map(({ name }) => name), ['palace-explore']);
+assert.equal(typeof loaded.commands[0].command.handler, 'function');
 assert.equal(handle.status().state, 'operational', `unexpected lifecycle state: ${JSON.stringify(handle.status())}`);
 // Pi awaits every `before_agent_start` handler, so this one is awaited here too:
 // reading `.systemPrompt` off the unresolved promise would assert nothing.

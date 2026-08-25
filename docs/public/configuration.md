@@ -87,6 +87,10 @@ Confirm the target yourself before starting Pi. The integration does not discove
 
 Read-only mode rejects all three integration write paths while reads continue available. Handoff includes only bounded timestamp, project, branch, message-count, and last-user-text fields. Handoff remains off by default. Enable it either with `"handoff": true` in `.pi/mempalace.json` or with `MEMPALACE_HANDOFF=1`; a present environment value wins for that field, and only the literal `1` enables it.
 
+## The memory explorer
+
+`/palace-explore` adds no configuration key and no environment variable. It reads the palace this project already resolves through the precedence above, starts one host bound to `127.0.0.1` on an ephemeral port inside a trusted session, and authorizes every API request with a per-session token. Read-only mode changes nothing for it, because the explorer only ever reads. See the [memory explorer](memory-explorer.md) for its boundary, its structural-only relationships, and its acceptance evidence.
+
 ## Recall
 
 By default a session receives one bounded snapshot of this project's memory before its first turn, and after that the model reaches memory only by calling `palace_search` itself. Recall adds a second layer: with `"recall": true` or `MEMPALACE_RECALL=1`, every turn searches this project's memory using that turn's prompt and appends the matches that fit.

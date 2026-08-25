@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, normalize } from 'node:path';
@@ -11,6 +11,7 @@ const PUBLIC_DOCS = [
   'README.md',
   'CHANGELOG.md',
   'docs/public/install.md',
+  'docs/public/memory-explorer.md',
   'docs/public/configuration.md',
   'docs/public/privacy.md',
   'docs/public/migration.md',
@@ -314,4 +315,187 @@ test('all public docs are present in the exact packed artifact', () => {
   }))[0];
   const paths = new Set(packed.files.map(({ path }) => path));
   for (const path of PUBLIC_DOCS) assert(paths.has(path), `${path} is not packed`);
+});
+
+const EXPLORER_DOC = 'docs/public/memory-explorer.md';
+const VALIDATOR = 'scripts/acceptance-explorer.mjs';
+const STUDY_FIXTURE = 'test/mempalace/fixtures/explorer-study.json';
+
+function runValidator(...args) {
+  const run = spawnSync(process.execPath, [VALIDATOR, ...args], {
+    cwd: fileURLToPath(ROOT),
+    encoding: 'utf8',
+  });
+  return { status: run.status, output: `${run.stdout ?? ''}${run.stderr ?? ''}` };
+}
+
+function studyFile(mutate) {
+  const study = JSON.parse(text(STUDY_FIXTURE));
+  mutate(study);
+  const root = mkdtempSync(join(tmpdir(), 'mempalace-explorer-study-'));
+  const path = join(root, 'study.json');
+  writeFileSync(path, `${JSON.stringify(study, null, 2)}\n`);
+  return { path, root };
+}
+
+test('explorer documentation states the command, its boundary, and its evidence requirements', () => {
+  const explorer = text(EXPLORER_DOC);
+  assert.match(explorer, /`\/palace-explore`/u, 'the command must be named');
+  assert.match(explorer, /127\.0\.0\.1/u, 'the loopback-only host must be stated');
+  assert.match(explorer, /token/iu, 'the local authorization token must be stated');
+  assert.match(explorer, /trusted (?:session|project)/iu, 'local authorization must be stated');
+  assert.match(explorer, /(?:never writes|writes nothing|zero-write)/iu, 'zero-write behavior must be stated');
+  assert.match(explorer, /absolute path[^\n]*redact|redact[^\n]*absolute path/iu, 'path redaction must be stated');
+  assert.match(explorer, /structural/iu, 'live relationships must be described as structural');
+  assert.match(
+    explorer,
+    /knowledge graph[^\n]*(?:unavailable|absent|no |zero)/iu,
+    'the absent knowledge graph must be stated',
+  );
+  assert.match(explorer, /Google Chrome/u, 'the browser requirement must be named');
+  assert.match(explorer, /`npm run test:explorer`/u, 'the acceptance command must be named');
+  assert.match(explorer, /30 attempts/u);
+  assert.match(explorer, /27/u);
+  assert.match(explorer, /30 seconds/u);
+  assert.match(explorer, /10 developers/u);
+  assert.match(
+    explorer,
+    /synthetic[^\n]*reference|reference[^\n]*synthetic/iu,
+    'the committed study fixture must be identified as synthetic reference data',
+  );
+  assert.match(explorer, /needs-attention/u, 'missing evidence must be documented as needs-attention');
+});
+
+test('privacy and configuration document the explorer as a read-only local surface', () => {
+  const privacy = text('docs/public/privacy.md');
+  const configuration = text('docs/public/configuration.md');
+  for (const document of [privacy, configuration]) {
+    assert.match(document, /`\/palace-explore`/u, 'the explorer command must be documented');
+    assert.match(document, /127\.0\.0\.1/u, 'the loopback-only host must be documented');
+  }
+  assert.match(privacy, /(?:never writes|writes nothing|zero-write)/iu);
+  assert.match(privacy, /redact/iu);
+  assert.match(privacy, /(?:no remote|not hosted|never hosted)/iu);
+  assert.match(configuration, /(?:no configuration key|adds no key|no environment variable)/iu);
+  assert.match(text('README.md'), /`\/palace-explore`/u);
+});
+
+test('explorer acceptance commands are wired without a runtime dependency', () => {
+  const manifest = JSON.parse(text('package.json'));
+  assert.equal(manifest.dependencies, undefined, 'the explorer must add no runtime dependency');
+  assert.deepEqual(manifest.files, [
+    'integration',
+    'extensions/index.ts',
+    'docs/public',
+    'README.md',
+    'LICENSE',
+    'CHANGELOG.md',
+    'MIGRATION_PROVENANCE.md',
+  ], 'the package allowlist must not expand');
+  assert.equal(manifest.scripts['test:explorer'], `node ${VALIDATOR}`);
+  assert.match(manifest.scripts['test:packaged'], /gate-packaged\.sh/u);
+  assert.match(manifest.scripts['test:packaged'], /acceptance-extension\.mjs --explorer/u);
+});
+
+test('the committed study fixture is exactly 30 synthetic reference attempts', () => {
+  const study = JSON.parse(text(STUDY_FIXTURE));
+  assert.equal(study.evidence, 'synthetic-reference');
+  assert.equal(study.attempts.length, 30);
+  assert.equal(new Set(study.attempts.map((attempt) => attempt.participant)).size, 10);
+  assert.match(study.notice, /synthetic/iu);
+  assert.match(study.notice, /not[^\n]*(?:real|actual)/iu);
+});
+
+test('the study validator accepts the reference fixture and reports its needs-attention limit', () => {
+  const { status, output } = runValidator('--study', STUDY_FIXTURE);
+  assert.equal(status, 0, output);
+  assert.match(output, /30 attempts/u);
+  assert.match(output, /needs-attention/u);
+  assert.match(output, /SC-001/u);
+  assert.match(output, /synthetic/iu);
+});
+
+test('the study validator rejects fewer than 27 complete journeys under 30 seconds', () => {
+  const slow = studyFile((study) => {
+    for (const attempt of study.attempts.slice(0, 4)) attempt.seconds = 41.5;
+  });
+  try {
+    const { status, output } = runValidator('--study', slow.path);
+    assert.notEqual(status, 0, 'a study below the completion threshold must fail');
+    assert.match(output, /27/u);
+  } finally {
+    rmSync(slow.root, { recursive: true, force: true });
+  }
+
+  const incomplete = studyFile((study) => {
+    for (const attempt of study.attempts.slice(0, 4)) attempt.completed = false;
+  });
+  try {
+    const { status, output } = runValidator('--study', incomplete.path);
+    assert.notEqual(status, 0, 'an incomplete study must fail');
+    assert.match(output, /27/u);
+  } finally {
+    rmSync(incomplete.root, { recursive: true, force: true });
+  }
+});
+
+test('the study validator rejects impossible journey durations', () => {
+  const impossible = studyFile((study) => {
+    study.attempts[0].seconds = -1;
+  });
+  try {
+    const { status, output } = runValidator('--study', impossible.path);
+    assert.notEqual(status, 0, 'a negative journey duration must fail');
+    assert.match(output, /duration/iu);
+  } finally {
+    rmSync(impossible.root, { recursive: true, force: true });
+  }
+});
+
+test('the study validator requires exactly 30 attempts from 10 developers', () => {
+  const short = studyFile((study) => study.attempts.pop());
+  try {
+    const { status, output } = runValidator('--study', short.path);
+    assert.notEqual(status, 0, 'a study with 29 attempts must fail');
+    assert.match(output, /30 attempts/u);
+  } finally {
+    rmSync(short.root, { recursive: true, force: true });
+  }
+
+  const lowered = studyFile((study) => {
+    study.requirements.completeThreshold = 1;
+    study.requirements.journeySeconds = 600;
+  });
+  try {
+    const { status, output } = runValidator('--study', lowered.path);
+    assert.notEqual(status, 0, 'a study that lowers its own thresholds must fail');
+    assert.match(output, /threshold/iu);
+  } finally {
+    rmSync(lowered.root, { recursive: true, force: true });
+  }
+});
+
+test('the performance harness fails closed when no browser is available', () => {
+  const { status, output } = runValidator('--browser', join(tmpdir(), 'no-such-google-chrome'));
+  assert.notEqual(status, 0, 'a missing browser must never be reported as a pass');
+  assert.match(output, /needs-attention/u);
+  assert.doesNotMatch(output, /PASS/u);
+});
+
+test('the explorer validator fails closed on malformed arguments', () => {
+  assert.match(runValidator('--study').output, /requires a value/u);
+  assert.match(runValidator('--unknown', 'value').output, /unknown argument/u);
+  assert.notEqual(runValidator().status, 0, 'the validator must require a mode');
+});
+
+test('the packaged acceptance journey opens the explorer on both supported cores', () => {
+  const acceptance = text('scripts/acceptance-extension.mjs');
+  assert.match(acceptance, /--explorer/u, 'the packaged explorer journey must be selectable');
+  assert.match(acceptance, /palace-explore/u, 'the packaged journey must open the explorer command');
+  for (const version of ['3.6.0', '3.7.1']) {
+    assert.ok(acceptance.includes(version), `the packaged journey must cover MemPalace ${version}`);
+  }
+  for (const step of ['search', 'details', 'neighborhood']) {
+    assert.ok(acceptance.includes(step), `the packaged journey must complete ${step}`);
+  }
 });
