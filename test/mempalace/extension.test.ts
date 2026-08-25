@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { after } from 'node:test';
-import type { ExtensionAPI, ToolDefinition } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI, RegisteredCommand, ToolDefinition } from '@earendil-works/pi-coding-agent';
 
 import { createExtension } from '../../integration/extension.ts';
 import type { McpClient } from '../../integration/mcp-client.ts';
@@ -11,17 +11,22 @@ import type { Launcher, PalaceResolution } from '../../integration/resolve.ts';
 
 type Handler = (event: any, context: any) => unknown;
 type AnyTool = ToolDefinition<any, any, any>;
+type CommandOptions = Omit<RegisteredCommand, 'name' | 'sourceInfo'>;
 function fakePi() {
   const handlers = new Map<string, Handler[]>();
   const registered: AnyTool[] = [];
   const tools: string[] = [];
   const commands: string[] = [];
+  const commandOptions = new Map<string, CommandOptions>();
   const pi = {
     on(name: string, handler: Handler) { handlers.set(name, [...(handlers.get(name) ?? []), handler]); },
     registerTool(tool: AnyTool) { registered.push(tool); tools.push(tool.name); },
-    registerCommand(name: string) { commands.push(name); },
+    registerCommand(name: string, options: CommandOptions) {
+      commands.push(name);
+      commandOptions.set(name, options);
+    },
   } as unknown as ExtensionAPI;
-  return { pi, handlers, registered, tools, commands };
+  return { pi, handlers, registered, tools, commands, commandOptions };
 }
 function fakeClient(): McpClient {
   return {
@@ -41,6 +46,15 @@ const active = {
   createMcpClient: () => fakeClient(),
   captureWakeUp: async () => '',
 };
+
+const EXPLORER_URL = `http://127.0.0.1:4321/#token=${'a'.repeat(64)}`;
+function fakeExplorerServer(onClose: () => void = () => {}) {
+  return async () => ({
+    url: EXPLORER_URL,
+    origin: 'http://127.0.0.1:4321',
+    close: async () => { onClose(); },
+  });
+}
 
 const scratchDirs: string[] = [];
 after(() => {
@@ -182,7 +196,62 @@ test('tools and client appear only at session start, exactly once across repeate
   assert.equal(handle.reason, undefined);
   assert.equal(clients, 1);
   assert.deepEqual(host.tools.sort(), ['palace_diary', 'palace_save', 'palace_search', 'palace_status']);
-  assert.deepEqual(host.commands, []);
+  assert.deepEqual(host.commands, ['palace-explore']);
+});
+
+test('the explorer command exists only for an authorized trusted session', async () => {
+  const cases: Array<{ trusted?: boolean; expected: string[] }> = [
+    { trusted: true, expected: ['palace-explore'] },
+    { trusted: false, expected: [] },
+    { expected: [] },
+  ];
+  for (const { trusted, expected } of cases) {
+    const host = fakePi();
+    const handle = createExtension(host.pi, { ...active, explorer: { startServer: fakeExplorerServer() } });
+    await sessionStart(host, hostContext(trusted === undefined ? {} : { trusted }));
+    assert.equal(handle.active, true);
+    assert.deepEqual(host.commands, expected, `trust ${String(trusted)} produced ${host.commands.join()}`);
+  }
+});
+
+test('session_shutdown closes the explorer host before the MCP client, idempotently', async () => {
+  const order: string[] = [];
+  const host = fakePi();
+  const notices: string[] = [];
+  createExtension(host.pi, {
+    ...active,
+    createMcpClient: () => ({ ...fakeClient(), shutdown: async () => { order.push('mcp'); } }),
+    explorer: {
+      openBrowser: async () => { order.push('browser'); },
+      startServer: fakeExplorerServer(() => order.push('http')),
+    },
+  });
+  const context = hostContext({ notices, trusted: true });
+  await sessionStart(host, context);
+
+  await host.commandOptions.get('palace-explore')!.handler('', context as never);
+  assert.deepEqual(order, ['browser']);
+  assert.equal(notices.length, 1);
+  assert.ok(notices[0]!.includes(new URL(EXPLORER_URL).origin), 'the command must expose the local origin');
+  assert.equal(notices[0]!.includes('#token='), false, 'a successful launch must not repeat the token');
+
+  await host.handlers.get('session_shutdown')![0]!({}, context);
+  await host.handlers.get('session_shutdown')![0]!({}, context);
+  assert.deepEqual(order, ['browser', 'http', 'mcp'], 'the HTTP host must close once, before the MCP client');
+});
+
+test('an unopened explorer closes without starting anything', async () => {
+  const host = fakePi();
+  let started = 0;
+  createExtension(host.pi, {
+    ...active,
+    explorer: { startServer: fakeExplorerServer(() => { started += 1; }) },
+  });
+  const context = hostContext({ trusted: true });
+  await sessionStart(host, context);
+  assert.deepEqual(host.commands, ['palace-explore'], 'registration alone must not open a server');
+  await host.handlers.get('session_shutdown')![0]!({}, context);
+  assert.equal(started, 0);
 });
 
 test('event wrappers registered before initialization are harmless no-ops', async () => {

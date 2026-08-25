@@ -8,6 +8,13 @@ import {
   readProjectConfig,
   type ProjectConfig,
 } from './config.ts';
+import { createExplorerAdapter } from './explorer/adapter.ts';
+import {
+  createExplorerHost,
+  EXPLORER_COMMAND_NAME,
+  type ExplorerHost,
+  type ExplorerHostOverrides,
+} from './explorer/command.ts';
 import { createLifecycle, type Lifecycle, type LifecycleState, type LifecycleStatus } from './lifecycle.ts';
 import { createMcpClient as defaultCreateMcpClient, type McpClient } from './mcp-client.ts';
 import {
@@ -55,6 +62,7 @@ export interface CreateExtensionOptions {
     cwd: string,
   ) => McpClient;
   readonly captureWakeUp?: (client: McpClient) => Promise<string>;
+  readonly explorer?: ExplorerHostOverrides;
 }
 
 const CORE_UNAVAILABLE = 'MemPalace is unavailable. Install MemPalace 3.6.0 or 3.7.1, then restart Pi.';
@@ -96,6 +104,7 @@ interface Runtime {
   readonly gate: WriteSafetyGate;
   readonly project: string;
   readonly handoff: boolean;
+  readonly explorer: ExplorerHost | undefined;
 }
 
 function inactiveExtension(reason: ExtensionInactiveReason): ExtensionHandle {
@@ -141,7 +150,8 @@ export function createExtension(
     const cwd = options.cwd ?? context?.cwd ?? process.cwd();
 
     let config: ProjectConfig | null = null;
-    if (isProjectTrusted(context)) {
+    const trusted = isProjectTrusted(context);
+    if (trusted) {
       try {
         config = readProjectConfig(cwd);
       } catch (error) {
@@ -195,12 +205,21 @@ export function createExtension(
 
     registerPalaceTools(pi, client, gate, effective.sources);
 
+    const explorer = trusted
+      ? createExplorerHost({
+        ...options.explorer,
+        createAdapter: () => createExplorerAdapter(client, { project: palace.identity.project }),
+      })
+      : undefined;
+    if (explorer !== undefined) pi.registerCommand(EXPLORER_COMMAND_NAME, explorer.command);
+
     runtime = {
       lifecycle,
       client,
       gate,
       project: palace.identity.project,
       handoff: options.handoff ?? effective.handoff,
+      explorer,
     };
   }
 
@@ -212,6 +231,7 @@ export function createExtension(
   pi.on('before_agent_start', async (event) =>
     runtime?.lifecycle.beforeAgentStart(event.systemPrompt, event.prompt));
   pi.on('session_shutdown', async () => {
+    await runtime?.explorer?.close();
     await runtime?.lifecycle.shutdown();
     warningContext = undefined;
   });
