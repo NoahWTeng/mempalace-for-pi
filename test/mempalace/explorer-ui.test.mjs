@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { addGraphExpansion, createGraph, createState, displayGraph, displayRelationships, graphLayout, selectMemory } from '../../integration/explorer/assets/model.js';
+import { addGraphExpansion, createGraph, createRequestGate, createState, displayGraph, displayRelationships, graphLayout, selectMemory } from '../../integration/explorer/assets/model.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const asset = (name) => readFile(join(root, 'integration', 'explorer', 'assets', name), 'utf8');
@@ -20,20 +20,52 @@ test('the initial state has an explicit unavailable recent page', () => {
   assert.equal(state.neighborhood, null);
 });
 
-test('a selected seed stays pinned when filters exclude it without restoring excluded neighbours', () => {
+test('a selected seed stays pinned when memory filters exclude it without restoring excluded neighbours', () => {
+  const related = { ...target, room: 'decisions', recordedAt: '2026-08-10T00:00:00Z' };
   const selected = selectMemory(createState(), seed, {
     seed,
-    relationships: [{ category: 'structural', kind: 'same-source', direction: 'outgoing', target, temporalStatus: 'unknown', confidence: null, validFrom: null, validTo: null, provenance: 'unavailable' }],
+    relationships: [{ category: 'structural', kind: 'same-source', direction: 'outgoing', target: related, temporalStatus: 'unknown', confidence: null, validFrom: null, validTo: null, provenance: 'unavailable' }],
     available: 1,
     displayed: 1,
     omitted: 0,
     knowledgeGraph: 'unavailable',
   });
-  const filtered = displayRelationships({ ...selected, filters: { direction: 'incoming' } });
+  const filters = { ...selected.filters, room: 'decisions' };
+  const filtered = displayRelationships({ ...selected, filters });
 
   assert.equal(filtered.seed.pinned, true);
-  assert.deepEqual(filtered.relationships, []);
+  assert.deepEqual(filtered.relationships.map((relationship) => relationship.target.id), [target.id]);
+  assert.equal(filtered.filtered, false);
+});
+
+test('relationship filters cover category, direction, temporal status, organization, and date range', () => {
+  const matching = { ...target, room: 'decisions', recordedAt: '2026-08-10T00:00:00Z' };
+  const excluded = { ...target, id: 'excluded', room: 'notes', recordedAt: '2026-07-31T00:00:00Z' };
+  const selected = selectMemory(createState(), seed, {
+    seed,
+    relationships: [
+      { category: 'temporal', kind: 'supersedes', direction: 'incoming', target: matching, temporalStatus: 'current', confidence: null, validFrom: null, validTo: null, provenance: 'available' },
+      { category: 'structural', kind: 'same-room', direction: 'undirected', target: excluded, temporalStatus: 'unknown', confidence: null, validFrom: null, validTo: null, provenance: 'unavailable' },
+    ],
+    available: 2,
+    displayed: 2,
+    omitted: 0,
+    knowledgeGraph: 'unavailable',
+  });
+  const filters = { direction: 'incoming', category: 'temporal', temporalStatus: 'current', room: 'decisions', from: '2026-08-01', to: '2026-08-31' };
+  const filtered = displayRelationships({ ...selected, filters });
+
+  assert.deepEqual(filtered.relationships.map((relationship) => relationship.target.id), [target.id]);
   assert.equal(filtered.filtered, true);
+});
+
+test('request gate rejects stale responses', () => {
+  const requests = createRequestGate();
+  const first = requests.begin();
+  const second = requests.begin();
+
+  assert.equal(requests.isCurrent(first), false);
+  assert.equal(requests.isCurrent(second), true);
 });
 
 test('graph expansion is deterministic, bounded, and leaves the selected memory intact', () => {
@@ -65,6 +97,7 @@ test('graph expansion is deterministic, bounded, and leaves the selected memory 
   assert.ok(expanded.graph.nodes.length <= 100);
   assert.equal(expanded.graph.lastExpansion.displayed, 25);
   assert.equal(expanded.graph.lastExpansion.available, 30);
+  assert.deepEqual(expanded.graph.summary, { available: 155, displayed: 50, omitted: 105 });
   assert.equal(expanded.selected.id, seed.id);
   assert.deepEqual(expanded.graph.expandedIds, ['target-1']);
   assert.ok(expanded.graph.relationships.slice(25).every((relationship) => relationship.graphSourceId === 'target-1'));
@@ -110,6 +143,9 @@ test('semantic shell and browser behavior keep untrusted values inert and use th
   assert.match(html, /<label[^>]*for="search"/u);
   assert.match(html, /role="status"/u);
   assert.match(html, /<button[^>]*type="reset"/u);
+  for (const control of ['relationship-category-filter', 'direction-filter', 'temporal-status-filter', 'room-filter', 'date-from-filter', 'date-to-filter']) {
+    assert.match(html, new RegExp(`id="${control}"`, 'u'));
+  }
   assert.doesNotMatch(html, /<svg\b/u);
   assert.match(html, /Outgoing and undirected relationships/u);
   assert.doesNotMatch(app, /innerHTML|insertAdjacentHTML|outerHTML/u);
@@ -128,12 +164,15 @@ test('semantic shell and browser behavior keep untrusted values inert and use th
   assert.match(app, /\/api\/neighborhood\?id=.*visible=/u);
   assert.match(app, /Authorization/u);
   assert.match(app, /history\.replaceState/u);
+  assert.match(app, /requests\.isCurrent/u);
   assert.match(app, /setAttribute\('aria-current'/u);
   assert.match(app, /Selected memory details are unavailable/u);
+  assert.match(app, /Full content above includes/u);
   assert.match(app, /form\.addEventListener\('reset'/u);
   assert.match(css, /\.graph-panel/u);
   assert.match(css, /\.graph-node/u);
-  assert.match(css, /:focus-visible/u);
+  assert.match(css, /:focus-visible[^\n]*var\(--signal-dark\)/u);
+  assert.match(css, /@media \(max-width: 48rem\)[^\n]*\.filter-grid[^\n]*grid-template-columns: 1fr/u);
   assert.match(css, /prefers-reduced-motion/u);
   assert.doesNotMatch(css, /@keyframes/u);
   assert.match(css, /animation: none/u);

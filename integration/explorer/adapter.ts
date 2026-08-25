@@ -167,7 +167,7 @@ function safeSource(rawSource: string): ExplorerSource {
   const value = rawSource.trim();
   if (value === '' || value === '?') return { scope: 'unavailable', label: 'unavailable' };
   const safeLabel = (label: string) => bounded(withoutSensitiveContent(label), EXPLORER_TITLE_MAX_CHARS);
-  if (isAbsolutePath(value) || value.split(/[\\/]/u).includes('..')) {
+  if (isAbsolutePath(value) || /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(value) || value.split(/[\\/]/u).includes('..')) {
     return { scope: 'label', label: safeLabel(baseName(value)) };
   }
   if (value.includes('/') || value.includes('\\')) {
@@ -257,12 +257,10 @@ export function createExplorerAdapter(
     };
   }
 
-  async function readTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown> | null> {
-    try {
-      return asRecord(await client.callReadTool(name, args));
-    } catch {
-      return null;
-    }
+  async function readTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const answer = await client.callReadTool(name, args);
+    if (!answer || typeof answer !== 'object' || Array.isArray(answer)) throw new Error('memory authority returned an invalid response');
+    return answer as Record<string, unknown>;
   }
 
   async function listDrawers(room?: string): Promise<DrawerPage> {
@@ -273,7 +271,6 @@ export function createExplorerAdapter(
     const args: Record<string, unknown> = { wing: project, limit: EXPLORER_PAGE_LIMIT };
     if (room !== undefined) args.room = room;
     const answer = await readTool(EXPLORER_READ_TOOLS.list, args);
-    if (answer === null) return { rows: [], available: 0, truncated: false };
     const rawRows = Array.isArray(answer.drawers) ? answer.drawers : [];
     const rows = rawRows
       .map((entry) => toLogicalDrawer(asRecord(entry)))
@@ -379,7 +376,6 @@ export function createExplorerAdapter(
     const known = drawerByHandle.get(id);
     if (!known) return null;
     const answer = await readTool(EXPLORER_READ_TOOLS.drawer, { drawer_id: known.drawerId });
-    if (answer === null) return null;
     const drawer = toLogicalDrawer(answer);
     if (drawer === null) return null;
     return {

@@ -263,6 +263,21 @@ test('user-visible answers carry no absolute path, credential, raw provenance or
   assert.equal(secrets.source.label, '[redacted credential]');
 });
 
+test('non-project URI sources are reduced to safe labels', async () => {
+  const row = {
+    drawer_id: 'drawer_demo_notes_uri',
+    wing: PROJECT,
+    room: 'notes',
+    content_preview: 'Remote source reference.',
+    metadata: { wing: PROJECT, room: 'notes', source_file: 'file://fileserver/private/note.md', filed_at: '2026-08-01T00:00:00Z' },
+  };
+  const adapter = adapterWith(async () => ({ drawers: [row], total: 1 }));
+  const page = await adapter.recent();
+
+  assert.deepEqual(page.memories[0]?.source, { scope: 'label', label: 'note.md' });
+  assert.doesNotMatch(JSON.stringify(page), /file:|fileserver/u);
+});
+
 test('memory handles are opaque per adapter, so they cannot be reversed into stored identity', async () => {
   const first = await harness().adapter.recent();
   const second = await harness().adapter.recent();
@@ -344,15 +359,15 @@ test('structural relationships are labelled as structural and unscoped knowledge
   assert.ok(reads.every((read) => read.name !== 'mempalace_kg_query'));
 });
 
-test('transient list failure is not cached as an empty palace', async () => {
+test('transient list failure stays unavailable and is not cached as an empty palace', async () => {
   let calls = 0;
   const adapter = adapterWith(async () => {
     calls += 1;
     throw new Error('temporary read failure');
   });
 
-  assert.equal((await adapter.recent()).available, 0);
-  assert.equal((await adapter.recent()).available, 0);
+  await assert.rejects(adapter.recent(), /temporary read failure/u);
+  await assert.rejects(adapter.recent(), /temporary read failure/u);
   assert.equal(calls, 2);
 });
 
@@ -370,7 +385,7 @@ test('details refuses to present a cached preview when the drawer read fails', a
   });
   const page = await adapter.recent();
 
-  assert.equal(await adapter.details(page.memories[0]?.id ?? ''), null);
+  await assert.rejects(adapter.details(page.memories[0]?.id ?? ''), /drawer unavailable/u);
 });
 
 test('the echoed query is bounded and redacted', async () => {

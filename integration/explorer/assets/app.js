@@ -1,4 +1,4 @@
-import { addGraphExpansion, createState, displayGraph, displayRelationships, graphLayout, present, relationshipLabel, selectMemory } from './model.js';
+import { addGraphExpansion, createRequestGate, createState, displayGraph, displayRelationships, graphLayout, present, relationshipLabel, selectMemory } from './model.js';
 
 const form = document.querySelector('#search-form');
 const search = document.querySelector('#search');
@@ -8,7 +8,12 @@ const indexNote = document.querySelector('#index-note');
 const memoryList = document.querySelector('#memory-list');
 const details = document.querySelector('#details');
 const filter = document.querySelector('#relationship-filter');
+const categoryFilter = document.querySelector('#relationship-category-filter');
 const directionFilter = document.querySelector('#direction-filter');
+const temporalStatusFilter = document.querySelector('#temporal-status-filter');
+const roomFilter = document.querySelector('#room-filter');
+const dateFromFilter = document.querySelector('#date-from-filter');
+const dateToFilter = document.querySelector('#date-to-filter');
 const relationshipNote = document.querySelector('#relationship-note');
 const incomingList = document.querySelector('#incoming-list');
 const outgoingList = document.querySelector('#outgoing-list');
@@ -18,6 +23,7 @@ const graphPanel = element('section', undefined, 'graph-panel');
 graphPanel.hidden = true;
 relationshipsSection.before(graphPanel);
 const token = new URLSearchParams(location.hash.slice(1)).get('token') || location.hash.slice(1);
+const requests = createRequestGate();
 let state = createState();
 
 if (location.hash) history.replaceState(null, '', `${location.pathname}${location.search}`);
@@ -110,7 +116,7 @@ function renderDetails() {
   details.append(metadata);
   const evidence = element('section', undefined, 'evidence');
   evidence.append(element('h3', 'Evidence'));
-  evidence.append(element('p', state.details.evidence > 0 ? `${state.details.evidence} additional stored chunk${state.details.evidence === 1 ? '' : 's'} retained as evidence.` : 'No additional stored chunks are available.'));
+  evidence.append(element('p', state.details.evidence > 0 ? `Full content above includes ${state.details.evidence} additional stored chunk${state.details.evidence === 1 ? '' : 's'} retained as evidence.` : 'No additional stored chunks are available.'));
   details.append(evidence);
 }
 
@@ -125,9 +131,25 @@ function relationshipRow(relationship, source) {
   return row;
 }
 
+function syncFilters() {
+  categoryFilter.value = state.filters.category;
+  directionFilter.value = state.filters.direction;
+  temporalStatusFilter.value = state.filters.temporalStatus;
+  dateFromFilter.value = state.filters.from;
+  dateToFilter.value = state.filters.to;
+  const rooms = [...new Set((state.graph?.nodes ?? []).map((node) => node.room).filter(Boolean))].sort();
+  const roomOptions = [element('option', 'All rooms'), ...rooms.map((room) => element('option', room))];
+  roomOptions[0].value = 'all';
+  for (let index = 0; index < rooms.length; index += 1) roomOptions[index + 1].value = rooms[index];
+  roomFilter.replaceChildren(...roomOptions);
+  roomFilter.value = rooms.includes(state.filters.room) ? state.filters.room : 'all';
+}
+
 function renderRelationships() {
   incomingList.replaceChildren();
   outgoingList.replaceChildren();
+  syncFilters();
+  relationshipNote.className = 'state-note';
   if (!state.neighborhood) {
     filter.disabled = true;
     relationshipNote.textContent = state.selected ? 'Selected memory relationships are unavailable.' : 'Select a memory to see relationships.';
@@ -136,21 +158,27 @@ function renderRelationships() {
   filter.disabled = false;
   const display = displayRelationships(state);
   const graph = displayGraph(state);
-  const relationships = state.graph ? graph.relationships : display.relationships;
+  const view = state.graph ? graph : display;
+  const relationships = view.relationships;
   const sources = new Map(state.graph?.nodes.map((node) => [node.id, node]));
   const incoming = relationships.filter((relationship) => relationship.direction === 'incoming');
   const outgoing = relationships.filter((relationship) => relationship.direction !== 'incoming');
   for (const relationship of incoming) incomingList.append(relationshipRow(relationship, sources.get(relationship.graphSourceId)));
   for (const relationship of outgoing) outgoingList.append(relationshipRow(relationship, sources.get(relationship.graphSourceId)));
-  if (display.seed?.pinned) {
-    const pinned = element('p', 'Selected memory is pinned outside the active filter.', 'pinned');
-    relationshipNote.replaceChildren(pinned);
-  } else if (relationships.length === 0) {
-    relationshipNote.textContent = 'No relationships match this filter. Structural, recorded, and temporal data may be unavailable.';
-  } else {
-    const page = state.neighborhood;
-    relationshipNote.textContent = `${page.displayed} of ${page.available} relationships shown; ${page.omitted} truncated. Knowledge graph data: ${present(page.knowledgeGraph)}.`;
+  const messages = [];
+  if (view.pinned || display.seed?.pinned) {
+    messages.push('Selected memory is pinned outside the active filter.');
+    relationshipNote.className = 'state-note pinned';
   }
+  const page = state.graph?.summary ?? state.neighborhood;
+  if (relationships.length === 0) {
+    messages.push('No relationships match this filter. Structural, recorded, and temporal data may be unavailable.');
+  } else if (view.filtered) {
+    messages.push(`${relationships.length} of ${page.displayed} displayed relationships match; ${page.displayed - relationships.length} filtered.`);
+  } else {
+    messages.push(`${page.displayed} of ${page.available} relationships shown; ${page.omitted} truncated. Knowledge graph data: ${present(state.neighborhood.knowledgeGraph)}.`);
+  }
+  relationshipNote.textContent = messages.join(' ');
 }
 
 function graphNode(node, position) {
@@ -254,15 +282,18 @@ async function expandGraph() {
   const graph = state.graph;
   const source = graph?.nodes.find((node) => node.id !== graph.root.id && !graph.expandedIds.includes(node.id));
   if (!source?.id) return;
+  const request = requests.begin();
   setStatus('Expanding the neighborhood map by up to 25 memories.');
   try {
     const neighborhood = await api(`/api/neighborhood?id=${encodeURIComponent(source.id)}&visible=26`);
+    if (!requests.isCurrent(request)) return;
     if (!neighborhood) throw new Error('Memory data is unavailable.');
     state = addGraphExpansion(state, neighborhood, source.id);
     renderGraph();
+    renderRelationships();
     setStatus(`Map expansion: ${state.graph.lastExpansion.displayed} of ${state.graph.lastExpansion.available} relationships shown; ${state.graph.lastExpansion.omitted} omitted.`);
   } catch (error) {
-    setStatus(error.message);
+    if (requests.isCurrent(request)) setStatus(error.message);
   }
 }
 
@@ -275,6 +306,7 @@ function render() {
 
 async function choose(memory) {
   if (!memory?.id) return;
+  const request = requests.begin();
   state = { ...state, selected: memory, details: null, neighborhood: null, graph: null, graphCollapsed: false };
   render();
   setStatus('Loading selected memory and its relationships.');
@@ -283,23 +315,28 @@ async function choose(memory) {
       api(`/api/details?id=${encodeURIComponent(memory.id)}`),
       api(`/api/neighborhood?id=${encodeURIComponent(memory.id)}&visible=26`),
     ]);
+    if (!requests.isCurrent(request)) return;
     if (!record || !neighborhood) throw new Error('Memory data is unavailable.');
     state = selectMemory(state, record, neighborhood);
     render();
     setStatus(`Selected ${record.title || 'memory'}.`);
   } catch (error) {
-    setStatus(error.message);
+    if (requests.isCurrent(request)) setStatus(error.message);
   }
 }
 
 async function recent() {
+  const request = requests.begin();
   setStatus('Loading recent memories.');
   try {
     state = createState();
-    state.recent = await api('/api/recent');
+    const page = await api('/api/recent');
+    if (!requests.isCurrent(request)) return;
+    state.recent = page;
     render();
     setStatus(countNote(state.recent, 'recent memories'));
   } catch (error) {
+    if (!requests.isCurrent(request)) return;
     state = createState();
     render();
     setStatus(error.message);
@@ -310,24 +347,39 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const query = search.value.trim();
   if (!query) return recent();
+  const request = requests.begin();
   state = { ...createState(), mode: 'search', query };
   render();
   setStatus('Searching memory.');
   try {
     const page = await api(`/api/search?query=${encodeURIComponent(query)}`);
+    if (!requests.isCurrent(request)) return;
     state = { ...createState(), mode: 'search', query, resultPage: page, results: page.hits ?? [] };
     render();
     setStatus(page.hits?.length ? countNote({ ...page, displayed: page.hits.length }, 'results') : 'No matching memories found.');
   } catch (error) {
-    setStatus(error.message);
+    if (requests.isCurrent(request)) setStatus(error.message);
   }
 });
 
 form.addEventListener('reset', () => queueMicrotask(recent));
-directionFilter.addEventListener('change', () => {
-  state = { ...state, filters: { direction: directionFilter.value } };
+function updateFilters() {
+  state = {
+    ...state,
+    filters: {
+      category: categoryFilter.value,
+      direction: directionFilter.value,
+      temporalStatus: temporalStatusFilter.value,
+      room: roomFilter.value,
+      from: dateFromFilter.value,
+      to: dateToFilter.value,
+    },
+  };
   renderGraph();
   renderRelationships();
-});
+}
+for (const control of [categoryFilter, directionFilter, temporalStatusFilter, roomFilter, dateFromFilter, dateToFilter]) {
+  control.addEventListener('change', updateFilters);
+}
 
 recent();

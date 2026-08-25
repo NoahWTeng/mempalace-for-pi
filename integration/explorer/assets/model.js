@@ -11,8 +11,21 @@ export function createState() {
     neighborhood: null,
     graph: null,
     graphCollapsed: false,
-    filters: { direction: 'all' },
+    filters: { category: 'all', direction: 'all', temporalStatus: 'all', room: 'all', from: '', to: '' },
     mode: 'recent',
+  };
+}
+
+export function createRequestGate() {
+  let current = 0;
+  return {
+    begin() {
+      current += 1;
+      return current;
+    },
+    isCurrent(request) {
+      return request === current;
+    },
   };
 }
 
@@ -38,6 +51,26 @@ function graphPage(page, displayed) {
   };
 }
 
+function memoryDate(memory) {
+  return String(memory?.recordedAt || memory?.authoredAt || '').slice(0, 10);
+}
+
+function memoryMatches(memory, filters) {
+  if (!memory) return false;
+  if (filters.room && filters.room !== 'all' && memory.room !== filters.room) return false;
+  const date = memoryDate(memory);
+  if (filters.from && (date === '' || date < filters.from)) return false;
+  if (filters.to && (date === '' || date > filters.to)) return false;
+  return true;
+}
+
+function relationshipMatches(relationship, filters) {
+  if (filters.category && filters.category !== 'all' && relationship.category !== filters.category) return false;
+  if (filters.direction && filters.direction !== 'all' && relationship.direction !== filters.direction) return false;
+  if (filters.temporalStatus && filters.temporalStatus !== 'all' && relationship.temporalStatus !== filters.temporalStatus) return false;
+  return memoryMatches(relationship.target, filters);
+}
+
 export function createGraph(state) {
   const seed = state.selected || state.neighborhood?.seed;
   if (!seed?.id) return null;
@@ -47,12 +80,14 @@ export function createGraph(state) {
   const nodesById = new Map([[seed.id, seed]]);
   for (const relationship of relationships) nodesById.set(relationship.target.id, relationship.target);
   const nodes = [...nodesById.values()];
+  const page = graphPage(state.neighborhood, relationships.length);
   return {
     root: seed,
     nodes,
     relationships,
     expandedIds: [],
-    lastExpansion: graphPage(state.neighborhood, relationships.length),
+    lastExpansion: page,
+    summary: page,
   };
 }
 
@@ -78,6 +113,7 @@ export function addGraphExpansion(state, neighborhood, sourceId) {
     }
     additions.push(relationship);
   }
+  const page = graphPage(neighborhood, additions.length);
   return {
     ...state,
     graph: {
@@ -85,7 +121,12 @@ export function addGraphExpansion(state, neighborhood, sourceId) {
       nodes: [...graph.nodes, ...newNodes],
       relationships: [...graph.relationships, ...additions],
       expandedIds: sourceId ? [...new Set([...graph.expandedIds, sourceId])] : graph.expandedIds,
-      lastExpansion: graphPage(neighborhood, additions.length),
+      lastExpansion: page,
+      summary: {
+        available: graph.summary.available + page.available,
+        displayed: graph.relationships.length + additions.length,
+        omitted: graph.summary.omitted + page.omitted,
+      },
     },
   };
 }
@@ -98,11 +139,13 @@ export function graphLayout(graph) {
 }
 
 export function displayGraph(state) {
-  if (!state.graph) return { nodes: [], relationships: [], pinned: false };
-  const direction = state.filters.direction;
-  const relationships = direction === 'all'
-    ? state.graph.relationships
-    : state.graph.relationships.filter((relationship) => relationship.direction === direction);
+  if (!state.graph) return { nodes: [], relationships: [], pinned: false, filtered: false };
+  const nodesById = new Map(state.graph.nodes.map((node) => [node.id, node]));
+  const relationships = state.graph.relationships.filter((relationship) => {
+    if (!relationshipMatches(relationship, state.filters)) return false;
+    const source = nodesById.get(relationship.graphSourceId);
+    return relationship.graphSourceId === state.selected?.id || memoryMatches(source, state.filters);
+  });
   const visibleIds = new Set([
     state.selected?.id,
     ...relationships.map(targetId),
@@ -111,7 +154,8 @@ export function displayGraph(state) {
   return {
     nodes: state.graph.nodes.filter((node) => visibleIds.has(node.id)),
     relationships,
-    pinned: direction !== 'all',
+    pinned: !memoryMatches(state.selected, state.filters),
+    filtered: relationships.length !== state.graph.relationships.length,
   };
 }
 
@@ -122,10 +166,9 @@ export function selectMemory(state, seed, neighborhood) {
 
 export function displayRelationships(state) {
   const relationships = state.neighborhood?.relationships ?? [];
-  const direction = state.filters.direction;
-  const visible = direction === 'all' ? relationships : relationships.filter((relationship) => relationship.direction === direction);
+  const visible = relationships.filter((relationship) => relationshipMatches(relationship, state.filters));
   return {
-    seed: state.selected ? { memory: state.selected, pinned: direction !== 'all' } : null,
+    seed: state.selected ? { memory: state.selected, pinned: !memoryMatches(state.selected, state.filters) } : null,
     relationships: visible,
     filtered: visible.length !== relationships.length,
   };

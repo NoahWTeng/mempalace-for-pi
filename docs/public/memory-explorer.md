@@ -63,10 +63,10 @@ mode trivially, because it only ever reads.
 
 ## Acceptance evidence
 
-Two validators back the explorer's published thresholds, both reached through
-`npm run test:explorer`. Both refuse to invent evidence: a
-missing browser, a missing core, or missing human evidence is reported as `needs-attention`
-and never as a pass.
+Two validators exercise the explorer's published thresholds, both reached through
+`npm run test:explorer`. Both refuse to invent evidence: a missing browser, a missing core,
+missing human evidence, or an unverified benchmark environment is reported as
+`needs-attention` and never as a criterion pass.
 
 ### Browser performance
 
@@ -77,8 +77,11 @@ npm run test:explorer -- --browser "/Applications/Google Chrome.app/Contents/Mac
 This requires a real Google Chrome binary; the harness drives it over the DevTools protocol
 and adds no dependency. It builds a 10,000-memory corpus, records 20 cold starts and 20 warm
 searches through the real user interface, and fails when the nearest-rank p95 cold start
-exceeds 2 seconds or the nearest-rank p95 warm search exceeds 500 milliseconds. Without an
-executable browser the run stops with `needs-attention`.
+exceeds 2 seconds or the nearest-rank p95 warm search exceeds 500 milliseconds. The timing
+measurement does not by itself attest SC-002: that criterion also requires an Apple M1 with
+8 GB RAM, a 1920×1080 display, and Chrome 151. Without an executable browser the run stops
+with `needs-attention`; a timing run outside an independently verified exact environment
+finishes with measurements and keeps SC-002 at `needs-attention`.
 
 ### Reference study
 

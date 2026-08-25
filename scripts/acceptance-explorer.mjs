@@ -521,7 +521,8 @@ async function measurePerformance(browser) {
     for (const failure of exceeded) process.stderr.write(`explorer performance rejected: ${failure}\n`);
     process.exit(1);
   }
-  process.stdout.write(`Explorer performance: PASS (${basename(browser)})\n`);
+  process.stdout.write(`Explorer performance measurement: within budgets (${basename(browser)})\n`);
+  process.stderr.write('needs-attention: SC-002 remains unclaimed until the Apple M1, 8 GB, 1920x1080, Chrome 151 environment is independently verified.\n');
 }
 
 const options = parseArguments();

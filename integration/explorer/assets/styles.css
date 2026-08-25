@@ -16,7 +16,7 @@
 body { margin: 0; min-width: 20rem; background: linear-gradient(90deg, transparent 0 4.5%, rgb(0 109 107 / 8%) 4.5% calc(4.5% + 1px), transparent calc(4.5% + 1px)); }
 button, input, select { font: inherit; }
 button, select { cursor: pointer; }
-button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--tag); outline-offset: 3px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--signal-dark); outline-offset: 3px; }
 .shell { width: min(90rem, calc(100% - 2rem)); margin: 0 auto; padding: clamp(1.5rem, 5vw, 4.5rem) 0 3rem; }
 .masthead { max-width: 52rem; border-left: .5rem solid var(--signal); padding-left: 1.2rem; }
 .eyebrow { margin: 0 0 .35rem; color: var(--signal-dark); font-size: .72rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
@@ -73,12 +73,13 @@ dd { overflow-wrap: anywhere; }
 .graph-key { margin-bottom: 0; color: var(--muted); font-size: .85rem; line-height: 1.45; }
 .relationship-filter { margin: 1.5rem 0; border: 1px solid var(--line); padding: 1rem; }
 .relationship-filter:disabled { opacity: .65; }
-.relationship-filter label { margin-right: .5rem; font-size: .9rem; }
-.relationship-filter select { border: 1px solid var(--ink); border-radius: 0; background: #fff; color: var(--ink); padding: .45rem; }
+.filter-grid { display: grid; grid-template-columns: minmax(8rem, .6fr) 1fr; gap: .65rem 1rem; align-items: center; }
+.relationship-filter label { font-size: .9rem; }
+.relationship-filter select, .relationship-filter input { min-width: 0; border: 1px solid var(--ink); border-radius: 0; background: #fff; color: var(--ink); padding: .45rem; }
 .relationship-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
 .relationship { border-top: 1px solid var(--line); padding: .9rem 0; }
 .relationship p { margin: .4rem 0; color: var(--muted); font-size: .85rem; line-height: 1.45; }
 .relationship .memory-button { margin-top: .4rem; border: 1px solid var(--signal-dark); padding: .55rem .65rem; }
 .pinned { display: inline-block; margin: 0; background: var(--tag); color: var(--ink); font-size: .85rem; font-weight: 750; padding: .4rem .55rem; }
-@media (max-width: 48rem) { .workspace, .relationship-columns { grid-template-columns: 1fr; } .search-controls { flex-wrap: wrap; } .search-controls input { flex-basis: 100%; } }
+@media (max-width: 48rem) { .workspace, .relationship-columns, .filter-grid { grid-template-columns: 1fr; } .search-controls { flex-wrap: wrap; } .search-controls input { flex-basis: 100%; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }

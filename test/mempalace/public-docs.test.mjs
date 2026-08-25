@@ -482,6 +482,16 @@ test('the performance harness fails closed when no browser is available', () => 
   assert.doesNotMatch(output, /PASS/u);
 });
 
+test('performance evidence does not claim the exact SC-002 environment from timings alone', () => {
+  const validator = text(VALIDATOR);
+  const guide = text('docs/public/memory-explorer.md');
+
+  assert.doesNotMatch(validator, /Explorer performance: PASS/u);
+  assert.match(validator, /SC-002 remains unclaimed/u);
+  assert.match(guide, /does not by itself attest SC-002/u);
+  assert.match(guide, /Apple M1.*8 GB.*1920.*1080.*Chrome 151/isu);
+});
+
 test('the explorer validator fails closed on malformed arguments', () => {
   assert.match(runValidator('--study').output, /requires a value/u);
   assert.match(runValidator('--unknown', 'value').output, /unknown argument/u);
