@@ -26,7 +26,7 @@ export class WriteSafetyError extends Error {
   }
 }
 
-export const CREDENTIAL_PATTERNS: readonly RegExp[] = [
+const CREDENTIAL_PATTERNS: readonly RegExp[] = [
   /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/iu,
   /^authorization\s*:\s*\S+/imu,
   /^(?:set-)?cookie\s*:\s*\S+/imu,

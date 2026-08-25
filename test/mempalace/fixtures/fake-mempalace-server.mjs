@@ -21,7 +21,6 @@
 //   orphan-exit      answers status, then exits by itself while its grandchild stays
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
 import * as readline from 'node:readline';
 
 const mode = process.argv[2] ?? 'normal';
@@ -57,246 +56,6 @@ function send(obj) {
   process.stdout.write(`${JSON.stringify(obj)}\n`);
 }
 
-const EXPLORER_MINIMAL = mode === 'explorer-minimal';
-const EXPLORER_CREDENTIAL = ['password', 'hunter2'].join('=');
-const EXPLORER_ABSOLUTE_SOURCE = ['/opt/private/palace/', 'password', '=', 'hunter2.json'].join('');
-const EXPLORER_FILE_URI = ['file:///', 'Users', '/alice/private/notes.md'].join('');
-const EXPLORER_UNC_PATH = ['\\\\', 'fileserver', '\\finance\\payroll.xlsx'].join('');
-
-function explorerRow(drawer_id, wing, room, content, source_file, filed_at, chunk_ids) {
-  return { drawer_id, wing, room, content, source_file, filed_at, authored_at: filed_at, chunk_ids };
-}
-
-const EXPLORER_ROWS = [
-  explorerRow(
-    'drawer_demo_notes_a1',
-    'demo',
-    'notes',
-    'Adapter boundary decision\nThe explorer reads through one narrow adapter.',
-    'docs/notes/adapter.md',
-    '2026-08-01T10:00:00Z',
-  ),
-  explorerRow(
-    'drawer_demo_notes_c1',
-    'demo',
-    'notes',
-    'Chunked memory first half and second half.',
-    'docs/notes/chunked.md',
-    '2026-08-02T10:00:00Z',
-    ['drawer_demo_notes_c1_chunk_000000', 'drawer_demo_notes_c1_chunk_000001'],
-  ),
-  explorerRow(
-    'drawer_demo_notes_t1',
-    'demo',
-    'notes',
-    'Twin content that cannot be told apart.',
-    'docs/notes/twin.md',
-    '2026-08-03T10:00:00Z',
-  ),
-  explorerRow(
-    'drawer_demo_notes_t2',
-    'demo',
-    'notes',
-    'Twin content that cannot be told apart.',
-    'docs/notes/twin.md',
-    '2026-08-03T10:00:00Z',
-  ),
-  explorerRow(
-    'drawer_demo_notes_u1',
-    'demo',
-    'notes',
-    'Unique note about the tunnel policy.',
-    'docs/notes/unique.md',
-    '2026-08-04T10:00:00Z',
-  ),
-  explorerRow(
-    'drawer_demo_secrets_s1',
-    'demo',
-    EXPLORER_FILE_URI,
-    `Deployment note: ${EXPLORER_CREDENTIAL} is read from ${EXPLORER_ABSOLUTE_SOURCE}, ${EXPLORER_FILE_URI}, and ${EXPLORER_UNC_PATH}.`,
-    EXPLORER_ABSOLUTE_SOURCE,
-    '2026-08-05T10:00:00Z',
-  ),
-  explorerRow(
-    'drawer_demo_roomless_r1',
-    'demo',
-    '',
-    'Roomless memory must not reach the explorer.',
-    'docs/notes/roomless.md',
-    '2026-08-05T09:30:00Z',
-  ),
-  explorerRow(
-    'drawer_other_notes_x1',
-    'other',
-    'notes',
-    'Cross project leak candidate.',
-    'docs/notes/leak.md',
-    '2026-08-06T10:00:00Z',
-  ),
-];
-
-for (let index = 0; index < 30; index += 1) {
-  const suffix = String(index).padStart(2, '0');
-  EXPLORER_ROWS.push(
-    explorerRow(
-      `drawer_demo_hub_h${suffix}`,
-      'demo',
-      'hub',
-      `Hub memory ${suffix} about the shared release runbook.`,
-      'docs/hub/runbook.md',
-      `2026-07-${suffix === '00' ? '01' : suffix}T09:00:00Z`,
-    ),
-  );
-}
-
-for (let index = 0; index < 150; index += 1) {
-  const suffix = String(index).padStart(3, '0');
-  const twin = index === 5 || index === 120;
-  EXPLORER_ROWS.push(
-    explorerRow(
-      `drawer_demo_large_l${suffix}`,
-      'demo',
-      'large',
-      index === 0 ? 'Large room seed.' : twin ? 'Large twin content.' : `Large room memory ${suffix} common corpus.`,
-      twin ? 'docs/large/twin.md' : `docs/large/${suffix}.md`,
-      index === 0 ? '2026-08-05T09:00:00Z' : twin ? '2026-06-01T10:00:00Z' : '2026-06-01T09:00:00Z',
-    ),
-  );
-}
-
-function explorerPreview(content) {
-  return content.length > 200 ? `${content.slice(0, 200)}...` : content;
-}
-
-function explorerMetadata(row) {
-  const metadata = {
-    wing: row.wing,
-    room: row.room,
-    source_file: basename(row.source_file),
-    filed_at: row.filed_at,
-  };
-  if (!EXPLORER_MINIMAL) {
-    metadata.authored_at = row.authored_at;
-    metadata.added_by = 'fake-mempalace';
-  }
-  if (row.chunk_ids) {
-    metadata.chunks = row.chunk_ids.length;
-    metadata.chunk_ids = row.chunk_ids;
-  }
-  return metadata;
-}
-
-function explorerSummary(row) {
-  const summary = {
-    drawer_id: row.drawer_id,
-    wing: row.wing,
-    room: row.room,
-    content_preview: explorerPreview(row.content),
-    metadata: explorerMetadata(row),
-  };
-  if (row.chunk_ids) {
-    summary.chunks = row.chunk_ids.length;
-    summary.chunk_ids = row.chunk_ids;
-  }
-  return summary;
-}
-
-function explorerListDrawers(args) {
-  const limit = Math.max(1, Math.min(Number(args.limit ?? 20), 100));
-  const offset = Math.max(0, Number(args.offset ?? 0));
-  const matched = EXPLORER_ROWS.filter(
-    (row) => (!args.wing || row.wing === args.wing) && (!args.room || row.room === args.room),
-  );
-  const page = matched.slice(offset, offset + limit).map(explorerSummary);
-  const payload = { drawers: page, offset, limit };
-  if (!EXPLORER_MINIMAL) {
-    payload.total = matched.length;
-    payload.count = page.length;
-  }
-  return payload;
-}
-
-function explorerGetDrawer(args) {
-  const row = EXPLORER_ROWS.find((candidate) => candidate.drawer_id === args.drawer_id);
-  if (!row) return { error: `Drawer not found: ${args.drawer_id}` };
-  const payload = {
-    drawer_id: row.drawer_id,
-    content: row.content,
-    wing: row.wing,
-    room: row.room,
-    metadata: explorerMetadata(row),
-  };
-  if (row.chunk_ids) {
-    payload.chunks = row.chunk_ids.length;
-    payload.chunk_ids = row.chunk_ids;
-  }
-  return payload;
-}
-
-function explorerHit(row, text, rank) {
-  const hit = {
-    text,
-    wing: row.wing,
-    room: row.room,
-    source_file: basename(row.source_file),
-    created_at: row.filed_at,
-    similarity: Number((0.9 - rank * 0.05).toFixed(3)),
-    distance: Number((0.1 + rank * 0.05).toFixed(4)),
-  };
-  if (!EXPLORER_MINIMAL) {
-    hit.source_path = row.source_file;
-    hit.authored_at = row.authored_at;
-    hit.effective_distance = hit.distance;
-    hit.closet_boost = 0;
-    hit.matched_via = 'drawer';
-  }
-  return hit;
-}
-
-function explorerSearch(args) {
-  const query = String(args.query ?? '').toLowerCase();
-  const limit = Math.max(1, Math.min(Number(args.limit ?? 5), 100));
-  if (query === 'wingless leak') {
-    const row = EXPLORER_ROWS.find((candidate) => candidate.wing === 'other');
-    const hit = explorerHit(row, row.content, 0);
-    delete hit.wing;
-    return { query: args.query, results: [hit] };
-  }
-  if (query === 'authored mismatch') {
-    const row = EXPLORER_ROWS.find((candidate) => candidate.drawer_id === 'drawer_demo_notes_a1');
-    const hit = explorerHit(row, row.content, 0);
-    hit.authored_at = '2026-08-09T10:00:00Z';
-    return { query: args.query, results: [hit] };
-  }
-  const scoped = query === 'leak'
-    ? EXPLORER_ROWS
-    : EXPLORER_ROWS.filter((row) => !args.wing || row.wing === args.wing);
-  const matched = scoped.filter((row) => row.content.toLowerCase().includes(query));
-  const results = matched.slice(0, limit).map((row, rank) => {
-    const text = row.chunk_ids ? row.content.slice(0, 25) : row.content;
-    return explorerHit(row, text, rank);
-  });
-  return {
-    query: args.query,
-    filters: { wing: args.wing ?? null, room: args.room ?? null, source_file: null },
-    total_before_filter: matched.length,
-    results,
-  };
-}
-
-function explorerTool(name, args) {
-  if (name === 'mempalace_list_drawers') return explorerListDrawers(args);
-  if (name === 'mempalace_get_drawer') return explorerGetDrawer(args);
-  if (name === 'mempalace_search') return explorerSearch(args);
-  if (name === 'mempalace_kg_query') {
-    if (EXPLORER_MINIMAL) return { error: `Unknown tool: ${name}` };
-    return { entity: args.entity, as_of: args.as_of ?? null, facts: [], count: 0 };
-  }
-  if (name === 'mempalace_follow_tunnels') return [];
-  if (name === 'mempalace_list_hallways') return [];
-  return null;
-}
-
 rl.on('line', (line) => {
   const trimmed = line.trim();
   if (!trimmed) return;
@@ -320,10 +79,7 @@ rl.on('line', (line) => {
       result: {
         protocolVersion: '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: {
-          name: 'fake-mempalace',
-          version: mode === 'incompatible' ? '9.9.9' : EXPLORER_MINIMAL ? '3.6.0' : '3.7.1',
-        },
+        serverInfo: { name: 'fake-mempalace', version: mode === 'incompatible' ? '9.9.9' : '3.7.1' },
       },
     });
     return;
@@ -348,18 +104,6 @@ rl.on('line', (line) => {
         },
       });
       return;
-    }
-
-    if (mode.startsWith('explorer')) {
-      const explorerResult = explorerTool(name, args);
-      if (explorerResult !== null) {
-        send({
-          jsonrpc: '2.0',
-          id: msg.id,
-          result: { content: [{ type: 'text', text: JSON.stringify(explorerResult) }] },
-        });
-        return;
-      }
     }
 
     if (name === 'mempalace_status') {
