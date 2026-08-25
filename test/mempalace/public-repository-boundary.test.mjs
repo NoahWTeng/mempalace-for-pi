@@ -75,6 +75,25 @@ const PROJECT_CONFIGURATION_ARTIFACTS = [
   'test/mempalace/config.test.ts',
 ];
 
+const EXPLORER_ARTIFACTS = [
+  'docs/public/memory-explorer.md',
+  'integration/explorer/adapter.ts',
+  'integration/explorer/assets/app.js',
+  'integration/explorer/assets/index.html',
+  'integration/explorer/assets/model.js',
+  'integration/explorer/assets/styles.css',
+  'integration/explorer/command.ts',
+  'integration/explorer/server.ts',
+  'scripts/acceptance-explorer.mjs',
+  'scripts/gate-explorer-task.sh',
+  'test/mempalace/explorer-adapter.test.ts',
+  'test/mempalace/explorer-server.test.ts',
+  'test/mempalace/explorer-ui.test.mjs',
+  'test/mempalace/fixtures/explorer-study.json',
+];
+
+const BOUNDARY_ARTIFACTS = [...PROJECT_CONFIGURATION_ARTIFACTS, ...EXPLORER_ARTIFACTS];
+
 function trackedFiles() {
   const listed = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
   assert.equal(listed.status, 0, listed.stderr);
@@ -179,9 +198,9 @@ test('unexpected files, credentials, and private paths are rejected', () => {
   }
 });
 
-test('the project-configuration artifacts are inside the exact tracked boundary', () => {
+test('the declared artifacts are inside the exact tracked boundary', () => {
   const tracked = trackedFiles();
-  for (const path of PROJECT_CONFIGURATION_ARTIFACTS) {
+  for (const path of BOUNDARY_ARTIFACTS) {
     assert.ok(PUBLIC_REPOSITORY_FILES.includes(path), `${path} is missing from the exact public allowlist`);
     assert.ok(tracked.includes(path), `${path} is not tracked`);
   }
@@ -192,8 +211,8 @@ test('the project-configuration artifacts are inside the exact tracked boundary'
   );
 });
 
-test('a project-configuration artifact missing from either side is rejected', () => {
-  for (const path of PROJECT_CONFIGURATION_ARTIFACTS) {
+test('a declared artifact missing from either side is rejected', () => {
+  for (const path of BOUNDARY_ARTIFACTS) {
     const { [path]: _dropped, ...withoutArtifact } = safeContents;
     assert.throws(
       () => assertPublicRepository(PUBLIC_REPOSITORY_FILES.filter((entry) => entry !== path), withoutArtifact),
@@ -211,8 +230,8 @@ test('a project-configuration artifact missing from either side is rejected', ()
   }
 });
 
-test('project-configuration artifacts are scanned like every other tracked file', () => {
-  for (const path of PROJECT_CONFIGURATION_ARTIFACTS) {
+test('the declared artifacts are scanned like every other tracked file', () => {
+  for (const path of BOUNDARY_ARTIFACTS) {
     for (const [name, sample] of Object.entries(CREDENTIAL_SAMPLES)) {
       assert.match(rejection(path, sample) ?? '', /credential content/u, `${path} exempts ${name}`);
     }
