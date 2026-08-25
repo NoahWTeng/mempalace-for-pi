@@ -1,4 +1,4 @@
-import { createState, displayRelationships, present, relationshipLabel, selectMemory } from './model.js';
+import { addGraphExpansion, createState, displayGraph, displayRelationships, graphLayout, present, relationshipLabel, selectMemory } from './model.js';
 
 const form = document.querySelector('#search-form');
 const search = document.querySelector('#search');
@@ -12,6 +12,11 @@ const directionFilter = document.querySelector('#direction-filter');
 const relationshipNote = document.querySelector('#relationship-note');
 const incomingList = document.querySelector('#incoming-list');
 const outgoingList = document.querySelector('#outgoing-list');
+const relationshipsSection = document.querySelector('.relationships');
+const svgNamespace = 'http://www.w3.org/2000/svg';
+const graphPanel = element('section', undefined, 'graph-panel');
+graphPanel.hidden = true;
+relationshipsSection.before(graphPanel);
 const token = new URLSearchParams(location.hash.slice(1)).get('token') || location.hash.slice(1);
 let state = createState();
 
@@ -21,6 +26,13 @@ function element(name, text, className) {
   const node = document.createElement(name);
   if (text !== undefined) node.textContent = text;
   if (className) node.className = className;
+  return node;
+}
+
+function svgElement(name, text, className) {
+  const node = document.createElementNS(svgNamespace, name);
+  if (text !== undefined) node.textContent = text;
+  if (className) node.setAttribute('class', className);
   return node;
 }
 
@@ -102,9 +114,10 @@ function renderDetails() {
   details.append(evidence);
 }
 
-function relationshipRow(relationship) {
+function relationshipRow(relationship, source) {
   const row = element('li', undefined, 'relationship');
   row.append(element('strong', relationshipLabel(relationship)));
+  if (source) row.append(element('p', `From: ${source.title || 'Untitled memory'}.`));
   row.append(element('p', `Direction: ${present(relationship.direction)}. Provenance: ${present(relationship.provenance)}. Temporal status: ${present(relationship.temporalStatus)}.`));
   row.append(element('p', `Recorded confidence: ${present(relationship.confidence)}. Valid from: ${present(relationship.validFrom)}. Valid to: ${present(relationship.validTo)}.`));
   if (relationship.target?.id) row.append(memoryButton(relationship.target, 'Open related memory'));
@@ -122,11 +135,13 @@ function renderRelationships() {
   }
   filter.disabled = false;
   const display = displayRelationships(state);
-  const relationships = display.relationships;
+  const graph = displayGraph(state);
+  const relationships = state.graph ? graph.relationships : display.relationships;
+  const sources = new Map(state.graph?.nodes.map((node) => [node.id, node]));
   const incoming = relationships.filter((relationship) => relationship.direction === 'incoming');
   const outgoing = relationships.filter((relationship) => relationship.direction !== 'incoming');
-  for (const relationship of incoming) incomingList.append(relationshipRow(relationship));
-  for (const relationship of outgoing) outgoingList.append(relationshipRow(relationship));
+  for (const relationship of incoming) incomingList.append(relationshipRow(relationship, sources.get(relationship.graphSourceId)));
+  for (const relationship of outgoing) outgoingList.append(relationshipRow(relationship, sources.get(relationship.graphSourceId)));
   if (display.seed?.pinned) {
     const pinned = element('p', 'Selected memory is pinned outside the active filter.', 'pinned');
     relationshipNote.replaceChildren(pinned);
@@ -138,21 +153,135 @@ function renderRelationships() {
   }
 }
 
+function graphNode(node, position) {
+  const group = svgElement('g', undefined, `graph-node ${position.shape}${node.id === state.selected?.id ? ' is-selected' : ''}`);
+  group.setAttribute('role', 'button');
+  group.setAttribute('tabindex', '0');
+  group.setAttribute('aria-label', `${position.shape === 'seed' ? 'Selected memory' : 'Related memory'}: ${node.title || 'Untitled memory'}. Open details and relationship evidence.`);
+  group.append(svgElement('title', `${position.shape === 'seed' ? 'Selected memory' : 'Related memory'}: ${node.title || 'Untitled memory'}`));
+  if (position.shape === 'seed') {
+    const shape = svgElement('circle', undefined, 'graph-shape');
+    shape.setAttribute('cx', position.x);
+    shape.setAttribute('cy', position.y);
+    shape.setAttribute('r', '28');
+    group.append(shape);
+  } else {
+    const shape = svgElement('rect', undefined, 'graph-shape');
+    shape.setAttribute('x', position.x - 31);
+    shape.setAttribute('y', position.y - 17);
+    shape.setAttribute('width', '62');
+    shape.setAttribute('height', '34');
+    group.append(shape);
+  }
+  const label = svgElement('text', `${position.shape === 'seed' ? 'Selected' : 'Related'}: ${(node.title || 'Untitled memory').slice(0, 18)}`, 'graph-node-label');
+  label.setAttribute('x', position.x);
+  label.setAttribute('y', position.y + (position.shape === 'seed' ? 42 : 29));
+  group.append(label);
+  const activate = () => choose(node);
+  group.addEventListener('click', activate);
+  group.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      activate();
+    }
+  });
+  return group;
+}
+
+function renderGraph() {
+  graphPanel.replaceChildren();
+  if (!state.graph) {
+    graphPanel.hidden = true;
+    return;
+  }
+  graphPanel.hidden = false;
+  const heading = element('div', undefined, 'section-heading compact');
+  heading.append(element('p', 'Map', 'eyebrow'));
+  heading.append(element('h2', 'Neighborhood map'));
+  graphPanel.append(heading);
+  const controls = element('div', undefined, 'graph-controls');
+  const collapse = element('button', state.graphCollapsed ? 'Expand map' : 'Collapse map', 'quiet');
+  collapse.type = 'button';
+  collapse.setAttribute('aria-expanded', String(!state.graphCollapsed));
+  collapse.addEventListener('click', () => {
+    state = { ...state, graphCollapsed: !state.graphCollapsed };
+    renderGraph();
+  });
+  controls.append(collapse);
+  const expandable = state.graph.nodes.some((node) => node.id !== state.graph.root.id && !state.graph.expandedIds.includes(node.id));
+  if (!state.graphCollapsed && state.graph.nodes.length < 100 && expandable) {
+    const expand = element('button', 'Expand map', 'quiet');
+    expand.type = 'button';
+    expand.addEventListener('click', expandGraph);
+    controls.append(expand);
+  }
+  graphPanel.append(controls);
+  const page = state.graph.lastExpansion;
+  graphPanel.append(element('p', `Map expansion: ${page.displayed} of ${page.available} relationships shown; ${page.omitted} omitted. ${state.graph.nodes.length} of 100 memories displayed.`, 'state-note'));
+  if (state.graphCollapsed) return;
+  const display = displayGraph(state);
+  const diagram = document.createElementNS(svgNamespace, 'svg');
+  diagram.setAttribute('class', 'memory-graph');
+  diagram.setAttribute('viewBox', '0 0 1000 560');
+  diagram.setAttribute('role', 'group');
+  diagram.setAttribute('aria-labelledby', 'graph-title graph-description');
+  diagram.append(svgElement('title', 'Neighborhood map', undefined));
+  diagram.lastChild.id = 'graph-title';
+  diagram.append(svgElement('desc', 'Circle: selected memory. Rectangle: related memory. Lines are recorded relationships listed below with the same evidence.', undefined));
+  diagram.lastChild.id = 'graph-description';
+  const positions = new Map(graphLayout(state.graph).map((position) => [position.id, position]));
+  for (const relationship of display.relationships) {
+    const sourcePosition = positions.get(relationship.graphSourceId);
+    const targetPosition = positions.get(relationship.target?.id);
+    if (!sourcePosition || !targetPosition) continue;
+    const edge = svgElement('line', undefined, 'graph-edge');
+    edge.setAttribute('x1', sourcePosition.x);
+    edge.setAttribute('y1', sourcePosition.y);
+    edge.setAttribute('x2', targetPosition.x);
+    edge.setAttribute('y2', targetPosition.y);
+    diagram.append(edge);
+    const label = svgElement('text', relationshipLabel(relationship), 'graph-edge-label');
+    label.setAttribute('x', (sourcePosition.x + targetPosition.x) / 2);
+    label.setAttribute('y', (sourcePosition.y + targetPosition.y) / 2);
+    diagram.append(label);
+  }
+  for (const node of display.nodes) diagram.append(graphNode(node, positions.get(node.id)));
+  graphPanel.append(diagram);
+  graphPanel.append(element('p', 'Circle means selected memory. Rectangle means related memory. Lines use the same relationship labels and evidence as the semantic list below.', 'graph-key'));
+}
+
+async function expandGraph() {
+  const graph = state.graph;
+  const source = graph?.nodes.find((node) => node.id !== graph.root.id && !graph.expandedIds.includes(node.id));
+  if (!source?.id) return;
+  setStatus('Expanding the neighborhood map by up to 25 memories.');
+  try {
+    const neighborhood = await api(`/api/neighborhood?id=${encodeURIComponent(source.id)}&visible=26`);
+    if (!neighborhood) throw new Error('Memory data is unavailable.');
+    state = addGraphExpansion(state, neighborhood, source.id);
+    renderGraph();
+    setStatus(`Map expansion: ${state.graph.lastExpansion.displayed} of ${state.graph.lastExpansion.available} relationships shown; ${state.graph.lastExpansion.omitted} omitted.`);
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
 function render() {
   renderIndex();
   renderDetails();
+  renderGraph();
   renderRelationships();
 }
 
 async function choose(memory) {
   if (!memory?.id) return;
-  state = { ...state, selected: memory, details: null, neighborhood: null };
+  state = { ...state, selected: memory, details: null, neighborhood: null, graph: null, graphCollapsed: false };
   render();
   setStatus('Loading selected memory and its relationships.');
   try {
     const [record, neighborhood] = await Promise.all([
       api(`/api/details?id=${encodeURIComponent(memory.id)}`),
-      api(`/api/neighborhood?id=${encodeURIComponent(memory.id)}&visible=1`),
+      api(`/api/neighborhood?id=${encodeURIComponent(memory.id)}&visible=26`),
     ]);
     if (!record || !neighborhood) throw new Error('Memory data is unavailable.');
     state = selectMemory(state, record, neighborhood);
@@ -197,6 +326,7 @@ form.addEventListener('submit', async (event) => {
 form.addEventListener('reset', () => queueMicrotask(recent));
 directionFilter.addEventListener('change', () => {
   state = { ...state, filters: { direction: directionFilter.value } };
+  renderGraph();
   renderRelationships();
 });
 
