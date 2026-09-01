@@ -7,6 +7,7 @@ const ROOT = new URL('../..', import.meta.url);
 const EXACT_FILES_ALLOWLIST = [
   'integration',
   'extensions/index.ts',
+  'prompts',
   'docs/public',
   'README.md',
   'LICENSE',
@@ -81,6 +82,7 @@ test('package dry-run contains exactly the public MemPalace integration boundary
   assert.equal(manifest.private, undefined, 'a private manifest cannot be published');
   assert.deepEqual(manifest.files, EXACT_FILES_ALLOWLIST);
   assert.deepEqual(manifest.pi?.extensions, ['./extensions/index.ts']);
+  assert.deepEqual(manifest.pi?.prompts, ['./prompts']);
   assert.deepEqual(manifest.exports, { '.': './extensions/index.ts' });
   assert.equal(manifest.dependencies, undefined, 'runtime packages must remain peer-only');
   assert.equal(manifest.optionalDependencies, undefined, 'runtime packages must remain peer-only');
@@ -98,6 +100,7 @@ test('package dry-run contains exactly the public MemPalace integration boundary
     ...FIXED_PUBLIC_FILES,
     ...walk('docs/public'),
     ...walk('integration'),
+    ...walk('prompts'),
   ].sort();
   assert.deepEqual(actual, expected);
 

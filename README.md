@@ -75,6 +75,8 @@ cat > .pi/mempalace.json <<'JSON'
 JSON
 ```
 
+Or run `/mempalace-init` inside Pi, which writes the same document and refuses to overwrite an existing declaration.
+
 Commit `.pi/mempalace.json` with the project. Because the palace is written in the `~/` form, another computer that checks the project out reads the same declaration and needs no repeated export. The document is read at every session start, and only after the project folder is trusted.
 
 ### 4. Start Pi in the project
@@ -99,6 +101,14 @@ Continue with non-sensitive test content: save one finding, search for it, write
 | `palace_save` | Persist one non-sensitive finding after duplicate detection. |
 | `palace_diary` | Read or write a bounded agent diary entry. |
 | `palace_status` | Inspect core, palace, and drawer status. |
+
+## Prompt templates
+
+| Command | Purpose |
+| --- | --- |
+| `/mempalace-init [palace-path]` | Declare this project's memory in `.pi/mempalace.json`. |
+
+`/mempalace-init` reports and stops when the project already declares a palace, because replacing that declaration would strand the memory behind it. It writes a project file and nothing else: it starts no process, reads no palace, and reaches no network.
 
 No additional public tool or slash command is registered.
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased]
+
+Adds the first prompt template, so declaring a project's memory no longer has to be transcribed by hand.
+
+### Added
+
+- `/mempalace-init [palace-path]`, a packaged prompt template that writes `.pi/mempalace.json` with `version: 1` and a `~/`-form palace, derived from the project directory name when no argument is given. It reports and stops when a declaration already exists rather than replacing it, because the existing document points at memory already written.
+- `prompts/` is now part of the packaged file list and is declared through `pi.prompts`. The packed boundary test asserts that entry and the packed prompt path, so the new surface cannot widen unnoticed.
+
+### Release gate
+
+- Packing this change alters the candidate digest, so [`task-967-matrix.json`](.github/verification/task-967-matrix.json) no longer binds the artifact it attests. The eight-cell matrix has to be re-run and the evidence regenerated before a pairing may claim verification again; the version stays `0.1.1` until that release act assigns the next one.
+
+### Unchanged
+
+- The tool surface is still exactly `palace_search`, `palace_save`, `palace_diary`, and `palace_status`. A prompt template is Markdown that expands into a prompt; it registers no tool, starts no process, and reaches no network.
+- The support claim is untouched. [Public compatibility documentation](docs/public/compatibility.md) remains the exhaustive green matrix, and the verified pairings still declare Pi `0.84.2` alone.
+
 ## [0.1.1] - 2026-08-24
 
 Widens the Pi peer range so a Pi minor release cannot refuse the install.

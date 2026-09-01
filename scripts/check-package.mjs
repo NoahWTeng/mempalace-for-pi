@@ -92,7 +92,8 @@ try {
     }
     if (memoryPath.test(path)) throw new Error(`package includes local memory payload: ${path}`);
     if (generatedPath.test(path)) throw new Error(`package includes generated test state: ${path}`);
-    if (!(publicFiles.has(path) || path.startsWith('integration/') || path.startsWith('docs/public/'))) {
+    if (!(publicFiles.has(path) || path.startsWith('integration/') || path.startsWith('docs/public/')
+      || path.startsWith('prompts/'))) {
       throw new Error(`package includes unrelated file: ${path}`);
     }
     const content = readFileSync(join(packageRoot, path));

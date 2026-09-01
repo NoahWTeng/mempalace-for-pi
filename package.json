@@ -25,6 +25,7 @@
   "files": [
     "integration",
     "extensions/index.ts",
+    "prompts",
     "docs/public",
     "README.md",
     "LICENSE",
@@ -44,6 +45,9 @@
   "pi": {
     "extensions": [
       "./extensions/index.ts"
+    ],
+    "prompts": [
+      "./prompts"
     ]
   },
   "peerDependencies": {

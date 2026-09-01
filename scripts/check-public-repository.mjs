@@ -35,6 +35,7 @@ export const PUBLIC_REPOSITORY_FILES = [
   'integration/wakeup.ts',
   'package-lock.json',
   'package.json',
+  'prompts/mempalace-init.md',
   'scripts/acceptance-extension.mjs',
   'scripts/aggregate-matrix-evidence.mjs',
   'scripts/check-package.mjs',

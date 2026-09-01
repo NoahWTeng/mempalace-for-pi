@@ -101,7 +101,7 @@ function assertMatrixEvidenceBound(
   assert.equal(tree.status, 0, tree.stderr);
   assert.equal(evidence.sourceTree, tree.stdout.trim(), 'matrix source tree differs from source commit');
   const packedPaths = [
-    'package.json', 'integration', 'extensions/index.ts', 'docs/public',
+    'package.json', 'integration', 'extensions/index.ts', 'prompts', 'docs/public',
     'README.md', 'LICENSE', 'CHANGELOG.md', 'MIGRATION_PROVENANCE.md',
   ];
   const drift = spawnSync('git', ['diff', '--quiet', evidence.sourceCommit, 'HEAD', '--', ...packedPaths], {
@@ -147,7 +147,14 @@ test('the lock metadata matches the root manifest', () => {
 
 test('the package exposes only the public integration after cutover', () => {
   const manifest = readManifest();
-  assert.deepEqual(manifest.pi, { extensions: ['./extensions/index.ts'] });
+  // Exact rather than partial: `pi` is the whole surface Pi loads from this
+  // package, so a key added here is a capability shipped to every install. The
+  // prompt directory is declared and the extension entry is unchanged; anything
+  // else appearing in this object is a widening that was never reviewed.
+  assert.deepEqual(manifest.pi, {
+    extensions: ['./extensions/index.ts'],
+    prompts: ['./prompts'],
+  });
   assert.deepEqual(manifest.exports, { '.': './extensions/index.ts' });
 });
 
