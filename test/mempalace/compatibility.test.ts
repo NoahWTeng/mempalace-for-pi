@@ -101,7 +101,7 @@ function assertMatrixEvidenceBound(
   assert.equal(tree.status, 0, tree.stderr);
   assert.equal(evidence.sourceTree, tree.stdout.trim(), 'matrix source tree differs from source commit');
   const packedPaths = [
-    'package.json', 'integration', 'extensions/index.ts', 'docs/public',
+    'package.json', 'integration', 'extensions/index.ts', 'prompts', 'docs/public',
     'README.md', 'LICENSE', 'CHANGELOG.md', 'MIGRATION_PROVENANCE.md',
   ];
   const drift = spawnSync('git', ['diff', '--quiet', evidence.sourceCommit, 'HEAD', '--', ...packedPaths], {
