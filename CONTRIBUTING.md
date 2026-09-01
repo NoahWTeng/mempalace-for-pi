@@ -44,9 +44,27 @@ pairing verified unless that digest still matches what `npm pack` produces. So a
 release is only possible when the attested evidence describes the exact tree
 being tagged.
 
+The version bump is itself an edit to a packed file — `package.json` and
+`CHANGELOG.md` are both in `files` — so it has to happen *before* the
+attestation, not after. Bumping a tree that was already attested silently
+invalidates the evidence, and `release.yml` then refuses the tag. That ordering
+is what withdrew the first `0.1.1` attempt.
+
 1. **Land the change.** Any edit to a packed file invalidates the current matrix;
    `npm test` will say so.
-2. **Re-attest.** Run the CI workflow manually (`workflow_dispatch`). The job
+2. **Bump, without a tag.** Do this before re-attesting, so the attested tree is
+   the tree that gets tagged. `npm version` on its own commits *and* tags in one
+   step, which would pin the tag to the pre-attestation commit:
+
+   ```bash
+   npm version minor --no-git-tag-version   # or patch, chosen by hand
+   ```
+
+   Then update the four literal tarball names in `ci.yml` and `gate-ci.sh`, the
+   manifest-version assertion in `test/mempalace/compatibility.test.ts`, and the
+   `CHANGELOG.md` heading, and commit. `npm test` is red from here until step 3
+   lands the refreshed evidence; that is the expected state, not a regression.
+3. **Re-attest.** Run the CI workflow manually (`workflow_dispatch`). The job
    summary reports whether the committed evidence is current; when it is stale,
    download the aggregate and commit it:
 
@@ -64,16 +82,17 @@ being tagged.
    thing that writes that file — every field in it is copied from a record a
    real gate run produced, and it refuses to write at all unless the records are
    complete, agree on one candidate, and cover the declared support surface.
-3. **Bump and tag.** Bump first, without a tag, so the tag can point at the tree
-   whose evidence was refreshed in step 2 — `npm version` on its own commits and
-   tags in one step, which would pin the tag to the pre-attestation commit.
+4. **Tag.** The tree is now attested at the version being released, so the tag
+   can point at it:
 
    ```bash
-   npm version patch --no-git-tag-version
-   # update the literal tarball names in ci.yml and gate-ci.sh, then commit
    git tag -a "v$(node -p 'require("./package.json").version')" -m "..."
    git push --follow-tags
    ```
+
+   A PR carrying matrix evidence must be merged with a merge commit. The suite
+   asserts the attested `sourceCommit` is an ancestor of `HEAD`; squash and
+   rebase both rewrite it, so either one lands a red `main`.
 
 The tag drives the rest. `release.yml` re-runs the gates, checks the tag against
 `package.json`, refuses to publish unless `npm pack` reproduces the attested
@@ -93,7 +112,7 @@ if the account requires a one-time password on token writes, the publish then
 fails with `EOTP`, which no unattended runner can answer.
 
 Version numbers are chosen by hand. One package and one maintainer do not need a
-release-automation tool to decide what `npm version patch` already decides.
+release-automation tool to decide what `npm version` already decides.
 
 ## Reporting a security issue
 
