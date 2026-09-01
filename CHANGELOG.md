@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2026-09-01
 
 Adds the first prompt template, so declaring a project's memory no longer has to be transcribed by hand.
 
@@ -11,7 +11,8 @@ Adds the first prompt template, so declaring a project's memory no longer has to
 
 ### Release gate
 
-- Packing this change alters the candidate digest, so [`task-967-matrix.json`](.github/verification/task-967-matrix.json) no longer binds the artifact it attests. The eight-cell matrix has to be re-run and the evidence regenerated before a pairing may claim verification again; the version stays `0.1.1` until that release act assigns the next one.
+- Packing a new file alters the candidate digest, so [`task-967-matrix.json`](.github/verification/task-967-matrix.json) was re-attested twice for this release: once against the merged change, and again against the version bump, which is itself a packed edit. Both runs report eight cells PASS. A minor rather than a patch bump, because a new command is added functionality.
+- The four literal tarball names in `ci.yml` and `gate-ci.sh`, and the manifest-version assertion in `compatibility.test.ts`, move to `0.2.0` with the manifest. They are literals by design: a release that forgets one fails its own gate rather than measuring the wrong artifact.
 
 ### Unchanged
 

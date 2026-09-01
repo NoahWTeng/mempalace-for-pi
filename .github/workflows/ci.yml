@@ -153,7 +153,7 @@ jobs:
           PI_BINARY="$PWD/node_modules/.bin/pi" \
             EXPECTED_CANDIDATE_SHA256="${{ needs.candidate.outputs.sha256 }}" \
             bash scripts/gate-release.sh \
-              --tarball "$RUNNER_TEMP/release-candidate/mempalace-for-pi-0.1.1.tgz" \
+              --tarball "$RUNNER_TEMP/release-candidate/mempalace-for-pi-0.2.0.tgz" \
               --mempalace-version "${{ matrix.mempalace-version }}"
           # A cell that passes but leaves no record cannot be aggregated, and a
           # matrix assembled from fewer cells than were run is the failure this
@@ -211,7 +211,7 @@ jobs:
       - run: |
           bash scripts/gate-ci.sh --linux "${{ matrix.node-version }}" \
             --mempalace-version "${{ matrix.mempalace-version }}" \
-            --tarball "$RUNNER_TEMP/release-candidate/mempalace-for-pi-0.1.1.tgz" \
+            --tarball "$RUNNER_TEMP/release-candidate/mempalace-for-pi-0.2.0.tgz" \
             --sha256 "${{ needs.candidate.outputs.sha256 }}" \
             --commit "${{ github.sha }}" \
             --evidence "$RUNNER_TEMP/matrix-evidence.jsonl"
