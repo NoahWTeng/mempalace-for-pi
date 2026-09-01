@@ -147,7 +147,14 @@ test('the lock metadata matches the root manifest', () => {
 
 test('the package exposes only the public integration after cutover', () => {
   const manifest = readManifest();
-  assert.deepEqual(manifest.pi, { extensions: ['./extensions/index.ts'] });
+  // Exact rather than partial: `pi` is the whole surface Pi loads from this
+  // package, so a key added here is a capability shipped to every install. The
+  // prompt directory is declared and the extension entry is unchanged; anything
+  // else appearing in this object is a widening that was never reviewed.
+  assert.deepEqual(manifest.pi, {
+    extensions: ['./extensions/index.ts'],
+    prompts: ['./prompts'],
+  });
   assert.deepEqual(manifest.exports, { '.': './extensions/index.ts' });
 });
 
