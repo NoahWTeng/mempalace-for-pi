@@ -256,9 +256,9 @@ test('documented rollback removes the old Pi source before installing its replac
 
 test('compatibility page is an exact projection of the current macOS matrix', () => {
   const matrix = JSON.parse(text('.github/verification/task-967-matrix.json'));
-  assert.doesNotThrow(() => assertMatrixEvidenceBound(matrix, { root: ROOT_PATH }));
+  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH });
   const anchored = Boolean(process.env.EXPECTED_CANDIDATE_SHA256 || process.env.EXPECTED_SOURCE_COMMIT);
-  assert.equal(matrix.cells.length, anchored ? 8 : 4);
+  assert.equal(matrix.cells.length, declared.length);
   assert(matrix.cells.every((cell) => cell.outcome === 'PASS'));
   const compatibility = text('docs/public/compatibility.md');
   assert.match(compatibility, /one SHA-bound packed candidate/iu);
@@ -291,9 +291,9 @@ test('compatibility states the exact evidence every recorded cell produced', () 
 
 test('the recorded matrix is one candidate proved by four complete cells', () => {
   const matrix = JSON.parse(text('.github/verification/task-967-matrix.json'));
-  const anchored = Boolean(process.env.EXPECTED_CANDIDATE_SHA256 || process.env.EXPECTED_SOURCE_COMMIT);
+  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH });
   assert.match(matrix.candidateSha256, /^[a-f0-9]{64}$/u);
-  assert.equal(matrix.cells.length, anchored ? 8 : 4);
+  assert.equal(matrix.cells.length, declared.length);
   for (const cell of matrix.cells) {
     const cellName = `${cell.platform}+${cell.nodeDeclared}+${cell.core}`;
     assert.equal(cell.candidateSha256, matrix.candidateSha256, `${cellName} proves another candidate`);

@@ -17,11 +17,6 @@ const gate = fs.readFileSync('scripts/gate-ci.sh', 'utf8');
 // repository's real security posture while this one enforced the strongest.
 const WORKFLOWS = [['ci.yml', workflow], ['release.yml', release]];
 for (const [name, source] of WORKFLOWS) {
-  // Only `runs-on:` decides where a job executes, so only `runs-on:` is
-  // inspected. Matching the whole file would make the comment above — which
-  // explains why this rule exists — trip the rule itself, and a guard that
-  // forbids describing the hazard it guards against gets weakened by whoever
-  // next needs to write that sentence.
   for (const line of source.split('\n').filter((line) => /^\s*runs-on:/.test(line))) {
     if (/self-hosted/.test(line)) {
       throw new Error(`${name} declares a self-hosted runner while pull requests are validated: ${line.trim()}`);

@@ -101,7 +101,6 @@ jobs:
           path: ${{ runner.temp }}/release-candidate/
           if-no-files-found: error
 
-  # The four-cell compatibility matrix. It installs a real MemPalace core and
   # drives Pi's whole package lifecycle per cell, so it costs roughly half an
   # hour and is not something to run on every commit. It is the deliberate
   # pre-release act that refreshes `.github/verification/task-967-matrix.json`,
@@ -131,10 +130,6 @@ jobs:
           name: release-candidate
           path: ${{ runner.temp }}/release-candidate
         # `gate-packaged.sh` provisions the real MemPalace core through uv, so uv
-        # has to exist before the gate runs. The release binary is pinned by
-        # version and verified by checksum rather than taking whatever `brew`
-        # currently ships, which would let the provisioning tool drift between
-        # matrix cells.
       - name: Install the pinned uv
         env:
           UV_VERSION: 0.8.13

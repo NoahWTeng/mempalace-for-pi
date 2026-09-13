@@ -184,7 +184,6 @@ grep -q 'isProjectTrusted' integration/extension.ts || {
 # Renaming the package renames the tarball `npm pack` produces, so the packaged
 # release gate and the CI gate are the checks that observe a consumer left
 # behind. Both are required by a push to `main`, so the task gate owes them.
-# `scripts/gate-ci.sh` runs the host-only workflow-integrity and candidate checks.
 
 npm run release:check
 bash scripts/gate-ci.sh

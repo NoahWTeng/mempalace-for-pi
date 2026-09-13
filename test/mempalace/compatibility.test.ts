@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -285,6 +285,52 @@ test('the CI gate keeps host integrity checks without Linux product execution', 
   assert.doesNotMatch(workflow, /linux-arm64:|gate-ci\.sh --linux|docker run/u);
 });
 
+test('the CI gate rejects a self-hosted runner', () => {
+  const result = runCiGateWithMutation('.github/workflows/ci.yml', (source) => {
+    const mutated = source.replace('runs-on: ubuntu-latest', 'runs-on: self-hosted');
+    assert.notEqual(mutated, source);
+    return mutated;
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /declares a self-hosted runner/u);
+});
+
+test('the CI gate rejects an unpinned action', () => {
+  const result = runCiGateWithMutation('.github/workflows/ci.yml', (source) => {
+    const mutated = source.replace(
+      'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+      'actions/checkout@v4',
+    );
+    assert.notEqual(mutated, source);
+    return mutated;
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /action is not SHA-pinned/u);
+});
+
+test('the CI gate rejects checkout credential persistence', () => {
+  const mutated = runCiGateWithMutation('.github/workflows/ci.yml', (source) => {
+    const withoutPersistence = source.replace('          persist-credentials: false\n', '');
+    assert.notEqual(withoutPersistence, source);
+    return withoutPersistence;
+  });
+  assert.notEqual(mutated.status, 0);
+  assert.match(`${mutated.stdout}\n${mutated.stderr}`, /checkout lacks persist-credentials: false/u);
+});
+
+test('the CI gate rejects excessive publication authority', () => {
+  const result = runCiGateWithMutation('.github/workflows/release.yml', (source) => {
+    const mutated = source.replace(
+      '  verify:\n',
+      '  verify:\n    permissions:\n      contents: write\n',
+    );
+    assert.notEqual(mutated, source);
+    return mutated;
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /exactly one job may write repository contents/u);
+});
+
 // Active verification must observe only the current MemPalace integration. A
 // gate that still runs, requires, or typechecks the retired Pi Mnesia runtime
 // or its historical benchmarks keeps this repository bound to code it neither
@@ -338,6 +384,52 @@ function selectedSuites(command: string): string[] {
 // its body contains no suite path, so it can never satisfy the assertions.
 function releaseGateChecks(source: string): string[] {
   return source.split('runCheck(').slice(1).map((rest) => rest.slice(0, rest.indexOf(');')));
+}
+
+type WorkflowPath = '.github/workflows/ci.yml' | '.github/workflows/release.yml';
+
+function runGit(cwd: string, args: string[]): void {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+}
+
+function runCiGateWithMutation(path: WorkflowPath, mutate: (source: string) => string) {
+  const sandbox = mkdtempSync(join(tmpdir(), 'mempalace-ci-gate-'));
+  try {
+    const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
+    assert.equal(tracked.status, 0, tracked.stderr);
+    for (const file of tracked.stdout.split('\0').filter(Boolean)) {
+      const destination = join(sandbox, file);
+      mkdirSync(dirname(destination), { recursive: true });
+      const source = readRepositoryFile(file);
+      writeFileSync(destination, file === path ? mutate(source) : source);
+    }
+
+    runGit(sandbox, ['init', '-q']);
+    runGit(sandbox, ['config', 'user.name', 'compatibility test']);
+    runGit(sandbox, ['config', 'user.email', 'compatibility@example.invalid']);
+    runGit(sandbox, ['add', '-A']);
+    runGit(sandbox, ['commit', '-qm', 'fixture']);
+
+    const bin = join(sandbox, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'actionlint'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    const pathValue = process.env.PATH ? `${bin}:${process.env.PATH}` : bin;
+    return spawnSync('bash', ['scripts/gate-ci.sh'], {
+      cwd: sandbox,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: join(sandbox, 'home'),
+        NPM_CONFIG_USERCONFIG: '/dev/null',
+        PATH: pathValue,
+        npm_config_cache: join(sandbox, 'npm-cache'),
+        npm_config_update_notifier: 'false',
+      },
+    });
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
 }
 
 test('the default suite runs every current MemPalace suite and no retired suite', () => {
