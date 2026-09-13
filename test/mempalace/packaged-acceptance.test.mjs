@@ -1,11 +1,39 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
+
+function executable(path, content) {
+  writeFileSync(path, content, { mode: 0o755 });
+}
+
+function probe() {
+  const root = mkdtempSync(join(tmpdir(), 'mempalace-gate-probe-'));
+  const bin = join(root, 'bin');
+  const log = join(root, 'commands.log');
+  mkdirSync(bin);
+  executable(join(bin, 'npm'), '#!/bin/sh\nprintf \'npm %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "${PROBE_FAIL_COMMAND:-}" = "$*" ]; then exit 17; fi\n');
+  executable(join(bin, 'node'), '#!/bin/sh\nprintf \'node %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "${PROBE_FAIL_COMMAND:-}" = "$*" ]; then exit 19; fi\n');
+  return {
+    root,
+    log,
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, PROBE_LOG: log },
+  };
+}
+
+function runScript(script, args, env) {
+  return spawnSync('/bin/bash', [script, ...args], {
+    cwd: new URL('../..', import.meta.url), encoding: 'utf8', env,
+  });
+}
+
+function commands(log) {
+  return existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) : [];
+}
 
 test('packaged gate declares the exact supported matrix and real Pi lifecycle', () => {
   const gate = read('scripts/gate-packaged.sh');
@@ -143,6 +171,76 @@ if hasattr(socket.socket, 'sendmsg'):
     assert.match(readFileSync(pythonEvidence, 'utf8'), /connect_ex[\s\S]*getaddrinfo[\s\S]*sendto[\s\S]*sendmsg/u);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('core gate runs static, full, and focused suites with fail-fast propagation', () => {
+  const passing = probe();
+  try {
+    const result = runScript('scripts/gate-core.sh', [], passing.env);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(commands(passing.log), [
+      'npm run check',
+      'npm run check:repository',
+      'npm test',
+      'node --test --experimental-strip-types test/mempalace/mcp-client.test.ts test/mempalace/mcp-client-integration.test.ts',
+    ]);
+  } finally {
+    rmSync(passing.root, { recursive: true, force: true });
+  }
+
+  const failing = probe();
+  try {
+    const result = runScript('scripts/gate-core.sh', [], {
+      ...failing.env, PROBE_FAIL_COMMAND: 'run check:repository',
+    });
+    assert.equal(result.status, 17);
+    assert.deepEqual(commands(failing.log), [
+      'npm run check',
+      'npm run check:repository',
+    ]);
+  } finally {
+    rmSync(failing.root, { recursive: true, force: true });
+  }
+});
+
+test('packaged gate runs core first and separates the explicit future selector', () => {
+  const gate = read('scripts/gate-packaged.sh');
+  assert.match(gate, /ACCEPTANCE_VERSIONS/iu);
+  assert.match(gate, /3\.9\.0/u);
+  assert.match(gate, /bash scripts\/gate-core\.sh/u);
+  assert.match(gate, /packaged-real-provider\.mjs/u);
+  assert.match(gate, /MEMPALACE_VERSIONS=\("3\.6\.0" "3\.7\.1"\)/u);
+  assert.doesNotMatch(read('integration/compatibility.ts'), /3\.9\.0/u);
+
+  const passing = probe();
+  executable(join(passing.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi\nexec /bin/bash "$@"\n');
+  try {
+    const result = runScript('scripts/gate-packaged.sh', [], passing.env);
+    assert.equal(result.status, 23);
+    assert.deepEqual(commands(passing.log), ['bash scripts/gate-core.sh']);
+    rmSync(passing.root, { recursive: true, force: true });
+  } finally {
+    rmSync(passing.root, { recursive: true, force: true });
+  }
+
+  const explicit = probe();
+  executable(join(explicit.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi\nexec /bin/bash "$@"\n');
+  try {
+    const result = runScript('scripts/gate-packaged.sh', ['--mempalace-version', '3.9.0'], explicit.env);
+    assert.equal(result.status, 23);
+    assert.deepEqual(commands(explicit.log), ['bash scripts/gate-core.sh']);
+  } finally {
+    rmSync(explicit.root, { recursive: true, force: true });
+  }
+
+  const unsupported = probe();
+  try {
+    const result = runScript('scripts/gate-packaged.sh', ['--mempalace-version', '3.8.0'], unsupported.env);
+    assert.equal(result.status, 2);
+    assert.deepEqual(commands(unsupported.log), []);
+  } finally {
+    rmSync(unsupported.root, { recursive: true, force: true });
   }
 });
 
