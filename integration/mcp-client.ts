@@ -517,10 +517,7 @@ export function createMcpClient(
 			};
 			const killTimer = setTimeout(() => {
 				killGroup(proc, "SIGKILL");
-				// SIGKILL on the direct child guarantees an 'exit' (→ finish);
-				// this backstop only matters if even that kill was impossible.
-				const backstop = setTimeout(finish, 1_000);
-				backstop.unref?.();
+				setTimeout(finish, 1_000);
 			}, shutdownGraceMs);
 			proc.once("exit", () => {
 				if (!processGroupAlive(proc.pid)) finish();

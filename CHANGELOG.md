@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Keep shutdown completion alive after an owned process-group leader exits before its remaining descendants, with a regression that acknowledges the descendant's SIGTERM-handler readiness.
+
 ## [0.2.0] - 2026-09-01
 
 Adds the first prompt template, so declaring a project's memory no longer has to be transcribed by hand.
