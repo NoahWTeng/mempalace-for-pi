@@ -50,6 +50,21 @@ jobs:
           npm run check
           npm test
           npm run check:repository
+      - name: Install pinned actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_1.7.12_linux_amd64.tar.gz"
+          echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/actionlint-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/actionlint-bin" actionlint
+          echo "$RUNNER_TEMP/actionlint-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/actionlint-bin/actionlint" --version
+      - run: bash scripts/gate-ci.sh
 
   # Packs the one candidate every matrix cell then measures. Skipped on pull
   # requests: a fork's tree is not a release candidate, and the identity checks
@@ -86,7 +101,7 @@ jobs:
           path: ${{ runner.temp }}/release-candidate/
           if-no-files-found: error
 
-  # The eight-cell compatibility matrix. It installs a real MemPalace core and
+  # The four-cell compatibility matrix. It installs a real MemPalace core and
   # drives Pi's whole package lifecycle per cell, so it costs roughly half an
   # hour and is not something to run on every commit. It is the deliberate
   # pre-release act that refreshes `.github/verification/task-967-matrix.json`,
@@ -116,12 +131,10 @@ jobs:
           name: release-candidate
           path: ${{ runner.temp }}/release-candidate
         # `gate-packaged.sh` provisions the real MemPalace core through uv, so uv
-        # has to exist before the gate runs. The Linux cells get theirs from the
-        # digest-pinned image `gate-ci.sh` names; macOS has no such image, so the
-        # release binary is pinned by version and verified by checksum to the
-        # same uv the Linux cells use. Taking whatever `brew` currently ships
-        # would let the provisioning tool drift between the two halves of a
-        # matrix whose entire purpose is to be exact.
+        # has to exist before the gate runs. The release binary is pinned by
+        # version and verified by checksum rather than taking whatever `brew`
+        # currently ships, which would let the provisioning tool drift between
+        # matrix cells.
       - name: Install the pinned uv
         env:
           UV_VERSION: 0.8.13
@@ -165,63 +178,6 @@ jobs:
           path: ${{ runner.temp }}/matrix-evidence.jsonl
           if-no-files-found: error
 
-  # `ubuntu-24.04-arm` is arm64 hardware, so the digest-pinned ARM64 container
-  # `gate-ci.sh` starts runs natively instead of under emulation. The container
-  # is kept rather than running the gate directly on the host because it is what
-  # pins the exact Node image each Linux cell is attested against.
-  linux-arm64:
-    needs: candidate
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04-arm
-    strategy:
-      fail-fast: true
-      matrix:
-        node-version: [22.19.0, 24.x]
-        pi-version: [0.84.2]
-        mempalace-version: [3.6.0, 3.7.1]
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-          # The container copies this checkout, suite and git history included,
-          # so the ancestry check inside it needs the same full history.
-          fetch-depth: 0
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: release-candidate
-          path: ${{ runner.temp }}/release-candidate
-        # `gate-ci.sh` lints and guards the workflows before it starts any
-        # container, so actionlint is a hard requirement of running it at all.
-        # It was satisfied invisibly on the maintainer's machine. Pinned and
-        # checksum-verified for the same reason uv is: a linter that silently
-        # changes version changes what the gate accepts.
-      - name: Install the pinned actionlint
-        env:
-          ACTIONLINT_VERSION: 1.7.12
-          ACTIONLINT_SHA256: 325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6
-        run: |
-          set -euo pipefail
-          archive="$RUNNER_TEMP/actionlint.tar.gz"
-          curl -fsSL -o "$archive" \
-            "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_arm64.tar.gz"
-          echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -
-          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/actionlint" --version
-      - run: |
-          bash scripts/gate-ci.sh --linux "${{ matrix.node-version }}" \
-            --mempalace-version "${{ matrix.mempalace-version }}" \
-            --tarball "$RUNNER_TEMP/release-candidate/mempalace-for-pi-0.2.0.tgz" \
-            --sha256 "${{ needs.candidate.outputs.sha256 }}" \
-            --commit "${{ github.sha }}" \
-            --evidence "$RUNNER_TEMP/matrix-evidence.jsonl"
-          test -s "$RUNNER_TEMP/matrix-evidence.jsonl"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: matrix-evidence-linux-${{ matrix.node-version }}-${{ matrix.mempalace-version }}
-          path: ${{ runner.temp }}/matrix-evidence.jsonl
-          if-no-files-found: error
-
   # Joins the per-cell records into the file the release gate reads. This is the
   # step that used to be missing: the cells measured, printed, and then their
   # records died with the runner, so refreshing
@@ -236,7 +192,7 @@ jobs:
   # *enforced* by `release.yml`, which refuses to publish a candidate the matrix
   # never attested.
   matrix-evidence:
-    needs: [macos-arm64, linux-arm64]
+    needs: [macos-arm64]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:

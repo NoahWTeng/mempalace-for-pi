@@ -75,6 +75,8 @@ const PROJECT_CONFIGURATION_ARTIFACTS = [
   'test/mempalace/config.test.ts',
 ];
 
+const MATRIX_EVIDENCE_ARTIFACT = 'test/mempalace/matrix-evidence.mjs';
+
 function trackedFiles() {
   const listed = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
   assert.equal(listed.status, 0, listed.stderr);
@@ -177,6 +179,12 @@ test('unexpected files, credentials, and private paths are rejected', () => {
       content,
     );
   }
+});
+
+test('the shared matrix evidence helper is inside the exact tracked boundary', () => {
+  const tracked = trackedFiles();
+  assert.ok(PUBLIC_REPOSITORY_FILES.includes(MATRIX_EVIDENCE_ARTIFACT));
+  assert.ok(tracked.includes(MATRIX_EVIDENCE_ARTIFACT));
 });
 
 test('the project-configuration artifacts are inside the exact tracked boundary', () => {

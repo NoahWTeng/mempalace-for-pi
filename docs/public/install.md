@@ -4,7 +4,7 @@ This is the tested community installation path for `mempalace-for-pi`. MemPalace
 
 ## Verified environment
 
-Use only a combination listed in [compatibility](compatibility.md): macOS or Linux on arm64, Node `22.19.0` or `24.x`, Pi `0.84.2`, and MemPalace `3.6.0` or `3.7.1`. The clean matrix completed core and integration installation in under ten minutes per cell.
+Use only a combination listed in [compatibility](compatibility.md): macOS on arm64, Node `22.19.0` or `24.x`, Pi `0.84.2`, and MemPalace `3.6.0` or `3.7.1`. The clean four-cell matrix completed core and integration installation in under ten minutes per cell. Linux is not supported by the current package contract.
 
 The commands below choose MemPalace `3.7.1`. They follow the official core's isolated `uv tool` recommendation and Pi `0.84.2` Git-package syntax:
 

@@ -35,7 +35,7 @@ export const SUPPORTED_NODE_VERSIONS = ['22.19.0', '24.x'] as const;
 export const SUPPORTED_PYTHON_VERSIONS = ['3.12'] as const;
 
 /** `process.platform` values covered by the CI matrix. */
-export const SUPPORTED_PLATFORMS = ['darwin', 'linux'] as const;
+export const SUPPORTED_PLATFORMS = ['darwin'] as const;
 
 /** `process.arch` values covered by the CI matrix. */
 export const SUPPORTED_ARCHITECTURES = ['arm64'] as const;
