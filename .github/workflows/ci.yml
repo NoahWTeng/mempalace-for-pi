@@ -101,10 +101,6 @@ jobs:
           path: ${{ runner.temp }}/release-candidate/
           if-no-files-found: error
 
-  # drives Pi's whole package lifecycle per cell, so it costs roughly half an
-  # hour and is not something to run on every commit. It is the deliberate
-  # pre-release act that refreshes `.github/verification/task-967-matrix.json`,
-  # which is why it is manual-only.
   macos-arm64:
     needs: candidate
     if: github.event_name == 'workflow_dispatch'
@@ -129,7 +125,6 @@ jobs:
         with:
           name: release-candidate
           path: ${{ runner.temp }}/release-candidate
-        # `gate-packaged.sh` provisions the real MemPalace core through uv, so uv
       - name: Install the pinned uv
         env:
           UV_VERSION: 0.8.13
