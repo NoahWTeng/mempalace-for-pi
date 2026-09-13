@@ -12,7 +12,10 @@ const matrixEvidence = createRequire(import.meta.url)('./matrix-evidence.mjs') a
   assertMatrixEvidenceBound: (evidence: Record<string, any>, options?: {
     root?: string;
     env?: Record<string, string | undefined>;
-  }) => void;
+  }) => {
+    anchored: boolean;
+    declared: Array<Record<string, string>>;
+  };
   packCandidateDigest: (root: string) => string;
 };
 
@@ -534,9 +537,7 @@ test('a pairing may only claim verification with complete SHA-bound matrix evide
 
   const evidencePath = join(root, '.github', 'verification', 'task-967-matrix.json');
   const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
-  const { declared } = matrixEvidence.assertMatrixEvidenceBound(evidence, { root }) as unknown as {
-    declared: Array<Record<string, string>>;
-  };
+  const { declared } = matrixEvidence.assertMatrixEvidenceBound(evidence, { root });
   // Pinned to an empty environment so these describe the unanchored contract
   // whatever the surrounding run supplies. Inside a matrix cell the real
   // environment carries an anchor, and asserting against it here would test the
