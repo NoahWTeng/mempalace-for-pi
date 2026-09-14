@@ -1,6 +1,6 @@
 # Compatibility
 
-The verified support contract is MemPalace `3.9.0` for the automatic loopback Hub on macOS arm64. It has exactly two cells: Node `22.19.0` and `24.x`, each with Pi `0.84.2` and MemPalace `3.9.0`. One SHA-bound packed candidate produced PASS evidence in both cells.
+MemPalace `3.9.0` is the verified support contract for the automatic loopback Hub on macOS arm64. It has exactly two cells: Node `22.19.0` and `24.x`, each with Pi `0.84.2` and MemPalace `3.9.0`. One SHA-bound packed candidate produced PASS evidence in both cells.
 
 | Platform | Architecture | Node | Pi | MemPalace | Result |
 | --- | --- | --- | --- | --- | --- |
