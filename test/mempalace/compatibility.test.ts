@@ -388,6 +388,13 @@ function releaseGateChecks(source: string): string[] {
   return source.split('runCheck(').slice(1).map((rest) => rest.slice(0, rest.indexOf(');')));
 }
 
+function withoutMatrixAnchors(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.EXPECTED_CANDIDATE_SHA256;
+  delete env.EXPECTED_SOURCE_COMMIT;
+  return env;
+}
+
 type WorkflowPath = '.github/workflows/ci.yml' | '.github/workflows/release.yml';
 
 function runGit(cwd: string, args: string[]): void {
@@ -540,7 +547,7 @@ test('a failed release check keeps a bounded transcript of its child command', (
     const blocked = spawnSync(process.execPath, ['scripts/release-gate.mjs', '--runs', '1'], {
       cwd: root,
       encoding: 'utf8',
-      env: { ...process.env, PI_BINARY: failing, RELEASE_EVIDENCE_DIR: evidenceDirectory },
+      env: { ...withoutMatrixAnchors(), PI_BINARY: failing, RELEASE_EVIDENCE_DIR: evidenceDirectory },
     });
     assert.notEqual(blocked.status, 0, 'a failed child command must not exit 0');
 
@@ -594,7 +601,7 @@ test('a failed release check redacts credentials and private paths from its tran
     const blocked = spawnSync(process.execPath, ['scripts/release-gate.mjs', '--runs', '1'], {
       cwd: root,
       encoding: 'utf8',
-      env: { ...process.env, PI_BINARY: leaking, RELEASE_EVIDENCE_DIR: evidenceDirectory },
+      env: { ...withoutMatrixAnchors(), PI_BINARY: leaking, RELEASE_EVIDENCE_DIR: evidenceDirectory },
     });
     assert.notEqual(blocked.status, 0, 'a leaking child command must not exit 0');
 

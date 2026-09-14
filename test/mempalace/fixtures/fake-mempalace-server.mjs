@@ -12,7 +12,6 @@
 //   exit-immediately exits before reading anything (a child that is already dead)
 //   exit-on-call     answers initialize, then exits the moment a tool is called
 //   incompatible     answers initialize as unsupported MemPalace 9.9.9
-//   hub-proxy-failed returns the upstream indeterminate Hub proxy error for writes
 //   grandchild       normal, but owns a SIGTERM-ignoring child in its process group
 //   grandchild-hang  like `grandchild`, but the server itself also ignores SIGTERM
 //                    and answers nothing except mempalace_status, so a caller can

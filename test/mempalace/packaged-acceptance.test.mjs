@@ -204,6 +204,15 @@ test('core gate runs static, full, and focused suites with fail-fast propagation
   }
 });
 
+test('pre-attestation core mode binds the current candidate and checks stale evidence separately', () => {
+  const gate = read('scripts/gate-core.sh');
+  assert.match(gate, /--pre-attestation/u);
+  assert.match(gate, /EXPECTED_CANDIDATE_SHA256/u);
+  assert.match(gate, /EXPECTED_SOURCE_COMMIT/u);
+  assert.match(gate, /npm test/u);
+  assert.match(gate, /unanchored/u);
+});
+
 test('packaged gate runs core first and separates the explicit future selector', () => {
   const gate = read('scripts/gate-packaged.sh');
   assert.match(gate, /ACCEPTANCE_VERSIONS/iu);
@@ -211,7 +220,10 @@ test('packaged gate runs core first and separates the explicit future selector',
   assert.match(gate, /bash scripts\/gate-core\.sh/u);
   assert.match(gate, /packaged-real-provider\.mjs/u);
   assert.match(gate, /MEMPALACE_VERSIONS=\("3\.6\.0" "3\.7\.1"\)/u);
-  assert.doesNotMatch(read('integration/compatibility.ts'), /3\.9\.0/u);
+  const compatibility = read('integration/compatibility.ts');
+  assert.match(compatibility, /mempalace: '3\.6\.0', verification: 'verified'/u);
+  assert.match(compatibility, /mempalace: '3\.7\.1', verification: 'verified'/u);
+  assert.match(compatibility, /mempalace: '3\.9\.0', verification: 'pending'/u);
 
   const passing = probe();
   executable(join(passing.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi\nexec /bin/bash "$@"\n');

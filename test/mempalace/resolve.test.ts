@@ -28,7 +28,6 @@ const BIN_FIXTURE = join(here, 'fixtures', 'fake-mempalace-bin.mjs');
 const scratch = mkdtempSync(join(tmpdir(), 'mempalace-resolve-'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
-/** A PATH entry holding matching MemPalace console scripts. */
 function binDirectoryWithMcp(name: string): string {
   const dir = join(scratch, name);
   mkdirSync(dir, { recursive: true });

@@ -22,7 +22,6 @@ export interface CompatibilityPairing {
  */
 export const SUPPORTED_PI_VERSIONS = ['0.84.2'] as const;
 
-/** MemPalace core version required by the Hub runtime. */
 export const SUPPORTED_MEMPALACE_VERSIONS = ['3.9.0'] as const;
 
 /** Node versions already covered by `.github/workflows/ci.yml`. */
