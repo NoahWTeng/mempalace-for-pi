@@ -213,6 +213,30 @@ test('pre-attestation core mode binds the current candidate and checks stale evi
   assert.match(gate, /unanchored/u);
 });
 
+test('3.9.0 packaged gate runs the real concurrency and migration acceptance', () => {
+  const gate = read('scripts/gate-packaged.sh');
+  assert.match(gate, /bash scripts\/gate-core\.sh --pre-attestation/u);
+  assert.match(gate, /acceptance-concurrency\.mjs/u);
+});
+
+test('3.9.0 packaged gate is safe when no tarball is selected under nounset', () => {
+  const gate = read('scripts/gate-packaged.sh');
+  assert.doesNotMatch(gate, /\$\{acceptance_args\[@\]\}/u);
+});
+
+test('migration acceptance promotes the copied legacy palace before reads', () => {
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  assert.match(acceptance, /migrated\.call\('mempalace_add_drawer'/u);
+  assert.match(acceptance, /migrationProbe\.reason, 'already_exists'/u);
+});
+
+test('concurrency kills the Hub only after every peer reaches the safe barrier', () => {
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  const barrier = acceptance.indexOf("marker('ready', id)");
+  const kill = acceptance.indexOf("signalOwned('hub', firstInfo.pid, 'SIGKILL')");
+  assert.ok(barrier >= 0 && barrier < kill);
+});
+
 test('packaged gate runs core first and separates the explicit future selector', () => {
   const gate = read('scripts/gate-packaged.sh');
   assert.match(gate, /ACCEPTANCE_VERSIONS/iu);
@@ -241,7 +265,7 @@ test('packaged gate runs core first and separates the explicit future selector',
   try {
     const result = runScript('scripts/gate-packaged.sh', ['--mempalace-version', '3.9.0'], explicit.env);
     assert.equal(result.status, 23);
-    assert.deepEqual(commands(explicit.log), ['bash scripts/gate-core.sh']);
+    assert.deepEqual(commands(explicit.log), ['bash scripts/gate-core.sh --pre-attestation']);
   } finally {
     rmSync(explicit.root, { recursive: true, force: true });
   }

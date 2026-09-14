@@ -22,6 +22,14 @@ if [[ -n "$selected_version" ]]; then
   MEMPALACE_VERSIONS=("$selected_version")
 fi
 
+if [[ "$selected_version" == "3.9.0" ]]; then
+  bash scripts/gate-core.sh --pre-attestation
+  if [[ -n "$tarball" ]]; then
+    exec node scripts/acceptance-concurrency.mjs --tarball "$tarball"
+  fi
+  exec node scripts/acceptance-concurrency.mjs
+fi
+
 bash scripts/gate-core.sh
 
 root="$PWD"

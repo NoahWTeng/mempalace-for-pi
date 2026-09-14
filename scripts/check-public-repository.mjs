@@ -37,6 +37,7 @@ export const PUBLIC_REPOSITORY_FILES = [
   'package-lock.json',
   'package.json',
   'prompts/mempalace-init.md',
+  'scripts/acceptance-concurrency.mjs',
   'scripts/acceptance-extension.mjs',
   'scripts/aggregate-matrix-evidence.mjs',
   'scripts/check-package.mjs',
