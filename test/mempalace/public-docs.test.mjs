@@ -335,7 +335,7 @@ test('the recorded current matrix is one candidate proved by two complete cells'
     assert.equal(cell.recordsAfter, 5, `${cellName} did not retain five records`);
     assert.equal(cell.retainedPercent, 100, `${cellName} did not retain every record`);
     assert.equal(cell.networkAttempts, 0, `${cellName} attempted routine non-loopback network`);
-    for (const phase of [
+    const phases = cell.core === '3.9.0' ? [
       'pi-install',
       'pi-list',
       'hub-startup',
@@ -343,7 +343,16 @@ test('the recorded current matrix is one candidate proved by two complete cells'
       'concurrent-writes',
       'migration-3.6.0',
       'migration-3.7.1',
-    ]) {
+    ] : [
+      'project-local-install',
+      'project-json-palace',
+      'restart',
+      'env-override',
+      'project-json-disabled',
+      'project-json-invalid',
+      'untrusted-json-unread',
+    ];
+    for (const phase of phases) {
       assert.ok(cell.lifecycle.includes(phase), `${cellName} did not exercise ${phase}`);
     }
   }
