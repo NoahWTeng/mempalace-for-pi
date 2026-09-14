@@ -57,7 +57,7 @@ test('identity, status, install path, first use, and release authorization claim
   assert.match(docs, /mempalace-for-pi/u);
   assert.match(docs, /official MemPalace core/u);
   assert.match(docs, /separate(?:ly)? (?:installed|distributed)|separate prerequisite/iu);
-  assert.match(text('docs/public/install.md'), /uv tool install --python 3\.12 'mempalace==3\.7\.1'/u);
+  assert.match(text('docs/public/install.md'), /uv tool install --python 3\.12 'mempalace==3\.9\.0'/u);
   assert.match(text('docs/public/install.md'), /pi install git:github\.com\/NoahWTeng\/mempalace-for-pi/u);
   // Both approved sources stay documented. npm is the short path; Git is the
   // one a reader can audit before running it, and it is the only one that can
@@ -90,7 +90,40 @@ test('installation documents the project-local package and the trust decision', 
   assert.match(install, /`\.pi\/mempalace\.json`/u);
   assert.match(install, /trust/iu);
   assert.match(install, /--approve/u);
-  assert.match(install, /restart/iu);
+  assert.match(install, /restart Pi/iu);
+  assert.match(install, /mempalace==3\.9\.0/u);
+  assert.match(install, /update both[^\n]*MemPalace[^\n]*mempalace-for-pi/iu);
+});
+
+test('the verified support floor keeps the daily public tools unchanged', () => {
+  const docs = allText();
+  assert.match(docs, /MemPalace `?3\.9\.0`?[^\n]*(?:verified|support contract)/iu);
+  assert.doesNotMatch(docs, /MemPalace `?3\.9\.0`?[^\n]*pending/iu);
+  assert.match(docs, /3\.6\.0[^\n]*3\.7\.1[^\n]*(?:historical|migration)/iu);
+  assert.match(docs, /palace_search[\s\S]*palace_save[\s\S]*palace_diary[\s\S]*palace_status/iu);
+  assert.match(docs, /daily[^\n]*(?:unchanged|remain the same)/iu);
+});
+
+test('the verified CI matrix is exactly two macOS ARM64 cells', () => {
+  const workflow = text('.github/workflows/ci.yml');
+  assert.match(workflow, /node-version:\s*\[22\.19\.0, 24\.x\]/u);
+  assert.match(workflow, /pi-version:\s*\[0\.84\.2\]/u);
+  assert.match(workflow, /mempalace-version:\s*\[3\.9\.0\]/u);
+  assert.equal((workflow.match(/mempalace-version:/gu) ?? []).length, 1);
+  assert.doesNotMatch(workflow, /linux-arm64:|windows:|win32/u);
+  assert.match(workflow, /runs-on: macos-15/iu);
+  assert.match(workflow, /EXPECTED_PLATFORM=darwin EXPECTED_ARCH=arm64/u);
+});
+
+test('the Auto-Hub contract covers loopback reuse, persistence, idle exit, and recovery', () => {
+  const docs = allText();
+  assert.match(docs, /automatically[^\n]*(?:start|launch)[^\n]*Hub/iu);
+  assert.match(docs, /loopback[^\n]*(?:Hub|HTTP)/iu);
+  assert.match(docs, /(?:reuse|reuses)[^\n]*Hub/iu);
+  assert.match(docs, /persist[^\n]*(?:across|between) Pi sessions/iu);
+  assert.match(docs, /upstream[^\n]*idle[^\n]*(?:exit|stop)/iu);
+  assert.match(docs, /restart Pi/iu);
+  assert.match(text('docs/public/troubleshooting.md'), /Hub[^\n]*(?:unavailable|failure|inert)/iu);
 });
 
 test('configuration documents the exact project JSON contract and its precedence', () => {
@@ -254,24 +287,28 @@ test('documented rollback removes the old Pi source before installing its replac
   }
 });
 
+test('the public-doc guard excludes unsupported MemPalace 3.x versions', () => {
+  assert.ok(text('test/mempalace/public-docs.test.mjs').includes('MemPalace 3\\.(?!6\\.0|7\\.1|9\\.0)'));
+});
+
 test('compatibility page is an exact projection of the current macOS matrix', () => {
   const matrix = JSON.parse(text('.github/verification/task-967-matrix.json'));
-  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH });
-  const anchored = Boolean(process.env.EXPECTED_CANDIDATE_SHA256 || process.env.EXPECTED_SOURCE_COMMIT);
+  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH, env: process.env });
   assert.equal(matrix.cells.length, declared.length);
   assert(matrix.cells.every((cell) => cell.outcome === 'PASS'));
   const compatibility = text('docs/public/compatibility.md');
   assert.match(compatibility, /one SHA-bound packed candidate/iu);
   const documentedRows = compatibility.match(/^\| darwin \| arm64 \|/gmu) ?? [];
-  assert.equal(documentedRows.length, 4);
+  assert.equal(documentedRows.length, 2);
+  assert.equal((compatibility.match(/^\| darwin \| arm64 \|[^\n]*\| (?:3\.6\.0|3\.7\.1) \| PASS \|$/gmu) ?? []).length, 0);
   assert.equal((compatibility.match(/^\| linux \| arm64 \|/gmu) ?? []).length, 0);
   assert.doesNotMatch(compatibility, /Windows|x64|amd64/iu);
-  assert.doesNotMatch(compatibility, /Node (?:20|21|23|25)|Pi 0\.(?!84\.2)|MemPalace 3\.(?!6\.0|7\.1)/iu);
-  if (!anchored) {
-    for (const cell of matrix.cells) {
-      const row = `| ${cell.platform} | ${cell.arch} | ${cell.nodeDeclared} | ${cell.pi} | ${cell.core} | PASS |`;
-      assert.equal(compatibility.split(row).length - 1, 1, `missing or duplicate matrix row: ${row}`);
-    }
+  assert.match(compatibility, /MemPalace `?3\.9\.0`?[^\n]*(?:verified|support contract)/iu);
+  assert.doesNotMatch(compatibility, /MemPalace `?3\.9\.0`?[^\n]*pending/iu);
+  assert.doesNotMatch(compatibility, /Node (?:20|21|23|25)|Pi 0\.(?!84\.2)|MemPalace 3\.(?!6\.0|7\.1|9\.0)/iu);
+  for (const cell of matrix.cells) {
+    const row = `| ${cell.platform} | ${cell.arch} | ${cell.nodeDeclared} | ${cell.pi} | ${cell.core} | PASS |`;
+    assert.equal(compatibility.split(row).length - 1, 1, `missing or duplicate matrix row: ${row}`);
   }
 });
 
@@ -284,14 +321,15 @@ test('compatibility states the exact evidence every recorded cell produced', () 
   assert.match(compatibility, /5\/5/u);
   assert.match(compatibility, /100% retention/u);
   assert.match(compatibility, /zero[^\n]*non-loopback/iu);
-  assert.match(compatibility, /five seconds/iu);
-  assert.match(compatibility, /project-local install/iu);
-  assert.match(compatibility, /`\.pi\/mempalace\.json`/u);
+  assert.match(compatibility, /bounded[^\n]*cleanup/iu);
+  assert.match(compatibility, /migration/iu);
+  assert.doesNotMatch(compatibility, /project-local install/iu);
+  assert.doesNotMatch(compatibility, /`\.pi\/mempalace\.json`/u);
 });
 
-test('the recorded matrix is one candidate proved by four complete cells', () => {
+test('the recorded current matrix is one candidate proved by two complete cells', () => {
   const matrix = JSON.parse(text('.github/verification/task-967-matrix.json'));
-  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH });
+  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH, env: process.env });
   assert.match(matrix.candidateSha256, /^[a-f0-9]{64}$/u);
   assert.equal(matrix.cells.length, declared.length);
   for (const cell of matrix.cells) {
@@ -299,11 +337,22 @@ test('the recorded matrix is one candidate proved by four complete cells', () =>
     assert.equal(cell.candidateSha256, matrix.candidateSha256, `${cellName} proves another candidate`);
     assert.equal(cell.sourceCommit, matrix.sourceCommit, `${cellName} proves another commit`);
     assert.equal(cell.sourceTree, matrix.sourceTree, `${cellName} proves another tree`);
-    assert.equal(cell.recordsBefore, 5, `${cellName} did not create five records`);
-    assert.equal(cell.recordsAfter, 5, `${cellName} did not retain five records`);
-    assert.equal(cell.retainedPercent, 100, `${cellName} did not retain every record`);
+    const retention = cell.migrationRecordsBefore === undefined
+      ? { before: cell.recordsBefore, after: cell.recordsAfter, percent: cell.retainedPercent }
+      : { before: cell.migrationRecordsBefore, after: cell.migrationRecordsAfter, percent: cell.migrationRetainedPercent };
+    assert.equal(retention.before, 5, `${cellName} did not create five migration records`);
+    assert.equal(retention.after, 5, `${cellName} did not retain five migration records`);
+    assert.equal(retention.percent, 100, `${cellName} did not retain every migration record`);
     assert.equal(cell.networkAttempts, 0, `${cellName} attempted routine non-loopback network`);
-    for (const phase of [
+    const phases = cell.core === '3.9.0' ? [
+      'pi-install',
+      'pi-list',
+      'hub-startup',
+      'hub-recovery',
+      'concurrent-writes',
+      'migration-3.6.0',
+      'migration-3.7.1',
+    ] : [
       'project-local-install',
       'project-json-palace',
       'restart',
@@ -311,7 +360,8 @@ test('the recorded matrix is one candidate proved by four complete cells', () =>
       'project-json-disabled',
       'project-json-invalid',
       'untrusted-json-unread',
-    ]) {
+    ];
+    for (const phase of phases) {
       assert.ok(cell.lifecycle.includes(phase), `${cellName} did not exercise ${phase}`);
     }
   }

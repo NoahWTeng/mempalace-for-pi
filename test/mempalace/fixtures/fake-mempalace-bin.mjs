@@ -9,8 +9,13 @@
 //
 // It accepts and ignores the `--palace <dir>` argument the integration passes,
 // because a fixture owns no storage.
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+if (basename(process.argv[1] ?? '') === 'mempalace' && process.argv.includes('--version')) {
+  console.log('MemPalace 3.9.0');
+  process.exit(0);
+}
 
 const server = join(dirname(fileURLToPath(import.meta.url)), 'fake-mempalace-server.mjs');
 process.argv = [process.argv[0], server, process.env.FAKE_MEMPALACE_MODE ?? 'normal'];

@@ -8,10 +8,30 @@ ACCEPTANCE_VERSIONS=("${MEMPALACE_VERSIONS[@]}" "3.9.0")
 PYPI_INDEX="https://pypi.org/simple"
 tarball=""
 selected_version=""
+attested=false
+
+sanitize_registry_env() {
+  local name
+  local -a removals=()
+  shopt -s nocasematch
+  while IFS= read -r name; do
+    case "$name" in
+      npm_config_*|uv_*|pip_*) removals+=(-u "$name") ;;
+    esac
+  done < <(compgen -e)
+  shopt -u nocasematch
+  if ((${#removals[@]})); then
+    exec env "${removals[@]}" /bin/bash "$0" "$@"
+  fi
+}
+
+sanitize_registry_env "$@"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tarball) tarball="${2:-}"; shift 2 ;;
     --mempalace-version) selected_version="${2:-}"; shift 2 ;;
+    --attested) attested=true; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -21,6 +41,24 @@ if [[ -n "$selected_version" ]]; then
   }
   MEMPALACE_VERSIONS=("$selected_version")
 fi
+if [[ "$attested" == true && "$selected_version" != "3.9.0" ]]; then
+  echo '--attested requires --mempalace-version 3.9.0' >&2
+  exit 2
+fi
+
+export NPM_CONFIG_USERCONFIG=/dev/null UV_NO_CONFIG=1
+
+if [[ "$selected_version" == "3.9.0" ]]; then
+  if [[ "$attested" == true ]]; then
+    bash scripts/gate-core.sh
+  else
+    bash scripts/gate-core.sh --pre-attestation
+  fi
+  if [[ -n "$tarball" ]]; then
+    exec node scripts/acceptance-concurrency.mjs --tarball "$tarball"
+  fi
+  exec node scripts/acceptance-concurrency.mjs
+fi
 
 bash scripts/gate-core.sh
 
@@ -28,9 +66,6 @@ root="$PWD"
 node_bin_dir="$(dirname "$(command -v node)")"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-export NPM_CONFIG_USERCONFIG=/dev/null UV_NO_CONFIG=1
-unset UV_EXTRA_INDEX_URL UV_INDEX UV_INDEX_URL UV_DEFAULT_INDEX UV_FIND_LINKS \
-  PIP_INDEX_URL PIP_EXTRA_INDEX_URL npm_config_registry NPM_CONFIG_REGISTRY
 if [[ -z "$tarball" ]]; then
   pack_json="$(npm pack --json --pack-destination "$tmp")"
   filename="$(node -e 'const p=JSON.parse(require("node:fs").readFileSync(0,"utf8"));process.stdout.write(p[0].filename)' <<<"$pack_json")"

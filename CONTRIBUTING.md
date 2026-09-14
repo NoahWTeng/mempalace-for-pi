@@ -27,11 +27,11 @@ the path.
 | --- | --- | --- |
 | `ci.yml` → `quick` | every push and pull request | Types, the full suite, and the repository boundary. This is the check that blocks a merge. |
 | `ci.yml` → `candidate` | push to `main`, manual | Packs the candidate, asserts the tree is clean and matches the commit, and uploads the tarball. |
-| `ci.yml` → `macos-arm64` | manual only | The four-cell macOS ARM64 compatibility matrix. Each cell installs a real core, drives Pi's whole package lifecycle, and uploads the record it measured. |
+| `ci.yml` → `macos-arm64` | manual only | The verified two-cell macOS ARM64 MemPalace `3.9.0` candidate matrix. Each cell installs the real core, drives Pi's whole package lifecycle, and uploads the record it measured. |
 | `ci.yml` → `matrix-evidence` | manual only | Joins the per-cell records into `task-967-matrix.json` and publishes it as an artifact. |
 | `release.yml` | pushing a `v*` tag | Verifies, publishes to npm with provenance, and opens the GitHub release. |
 
-Every job runs on a GitHub-hosted runner. That is not incidental:
+The current candidate matrix is verified. Its two cells use Node `22.19.0` and `24.x`, Pi `0.84.2`, and MemPalace `3.9.0`; the four-cell `3.6.0`/`3.7.1` matrix remains historical migration evidence only. Every job runs on a GitHub-hosted runner. That is not incidental:
 `scripts/gate-ci.sh` fails if any workflow declares a self-hosted runner, because
 fork pull requests are validated here and a fork's code must never reach a
 maintainer's machine. It is also what makes npm provenance possible at all — npm
@@ -39,10 +39,7 @@ refuses to attest a build from a self-hosted runner.
 
 ## Cutting a release
 
-The four-cell macOS ARM64 matrix pins one packed candidate by SHA-256, and the
-suite refuses to call a pairing verified unless that digest still matches what
-`npm pack` produces. So a release is only possible when the attested evidence
-describes the exact tree being tagged.
+The two-cell macOS ARM64 matrix pins one packed candidate by SHA-256, and the suite refuses to call a pairing verified unless that digest still matches what `npm pack` produces. The existing four-cell `3.6.0`/`3.7.1` record remains historical migration evidence; the current evidence verifies `3.9.0`. A release is only possible when evidence describes the exact tree being tagged.
 
 The version bump is itself an edit to a packed file — `package.json` and
 `CHANGELOG.md` are both in `files` — so it has to happen *before* the
@@ -50,8 +47,7 @@ attestation, not after. Bumping a tree that was already attested silently
 invalidates the evidence, and `release.yml` then refuses the tag. That ordering
 is what withdrew the first `0.1.1` attempt.
 
-1. **Land the change.** Any edit to a packed file invalidates the current matrix;
-   `npm test` will say so.
+1. **Land the change.** Any edit to a packed file invalidates the recorded matrix; `npm test` will say so. Update MemPalace and `mempalace-for-pi` together, then restart Pi before exercising the candidate.
 2. **Bump, without a tag.** Do this before re-attesting, so the attested tree is
    the tree that gets tagged. `npm version` on its own commits *and* tags in one
    step, which would pin the tag to the pre-attestation commit:

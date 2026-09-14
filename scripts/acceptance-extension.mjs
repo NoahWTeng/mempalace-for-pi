@@ -14,7 +14,7 @@ function argument(name) {
 }
 for (let index = 2; index < process.argv.length; index++) {
   const value = process.argv[index];
-  if (value === '--smoke' || value === '--full') continue;
+  if (value === '--smoke' || value === '--full' || value === '--attested') continue;
   assert(value === '--runs' || value === '--tarball' || value === '--mempalace-version', `unknown argument: ${value}`);
   index++;
 }
@@ -24,6 +24,7 @@ for (const name of ['--tarball', '--mempalace-version']) {
   const value = argument(name);
   if (value) args.push(name, value);
 }
+if (process.argv.includes('--attested')) args.push('--attested');
 const runs = Number(argument('--runs') ?? '1');
 assert(Number.isInteger(runs) && runs > 0, '--runs must be a positive integer');
 for (let run = 0; run < runs; run++) {

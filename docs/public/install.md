@@ -1,33 +1,43 @@
 # Install MemPalace for Pi
 
-This is the tested community installation path for `mempalace-for-pi`. MemPalace is the official, separately installed core; this Pi package is only the integration. Review both projects before installation because Pi extensions execute with the user's permissions.
+This is the verified support-floor installation path for the community `mempalace-for-pi` integration. MemPalace is the official, separately installed core; this Pi package is only the integration. Review both projects before installation because Pi extensions execute with the user's permissions.
 
 ## Verified environment
 
-Use only a combination listed in [compatibility](compatibility.md): macOS on arm64, Node `22.19.0` or `24.x`, Pi `0.84.2`, and MemPalace `3.6.0` or `3.7.1`. The clean four-cell matrix completed core and integration installation in under ten minutes per cell. Linux is not supported by the current package contract.
+The verified support contract requires macOS on arm64, Node `22.19.0` or `24.x`, Pi `0.84.2`, and MemPalace `3.9.0`. The exact two-cell `3.9.0` matrix passed with SHA-bound evidence. Linux is not supported by the current package contract, and Windows remains outside scope.
 
-The commands below choose MemPalace `3.7.1`. They follow the official core's isolated `uv tool` recommendation and Pi `0.84.2` Git-package syntax:
+The previous four-cell macOS matrix for MemPalace `3.6.0` and `3.7.1` remains historical migration context only. Do not use those old core versions with the current support floor.
+
+The commands below install the verified support floor and Pi `0.84.2`:
 
 ```bash
-uv tool install --python 3.12 'mempalace==3.7.1'
+uv tool install --python 3.12 'mempalace==3.9.0'
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.84.2
 mempalace --version
 pi --version
-pi install git:github.com/NoahWTeng/mempalace-for-pi
-pi list
 ```
 
-Expected version output is `MemPalace 3.7.1` and `0.84.2`. `pi list` must show `mempalace-for-pi`. To use the other tested core, change only the first command to:
+Expected output is `MemPalace 3.9.0` and `0.84.2`. Existing users must update both MemPalace and `mempalace-for-pi` from the same approved source, then restart Pi:
 
 ```bash
-uv tool install --python 3.12 'mempalace==3.6.0'
+uv tool install --python 3.12 'mempalace==3.9.0'
+pi remove -l npm:mempalace-for-pi --approve
+pi install -l npm:mempalace-for-pi --approve
 ```
 
-The integration installs from either npm (`npm:mempalace-for-pi`) or this repository (`git:github.com/NoahWTeng/mempalace-for-pi`). Both deliver one artifact: the compatibility matrix pins a packed candidate by SHA-256, and that exact tarball is what npm serves and what the `v0.1.0` tag builds. Only the transport differs, so pick whichever your project's review policy prefers — installing from Git lets you read the source you are about to run.
+Use the corresponding `git:github.com/NoahWTeng/mempalace-for-pi` source in both Pi commands when that is the source already approved for the project. Restart Pi after the update. Daily `palace_search`, `palace_save`, `palace_diary`, and `palace_status` behavior remains unchanged.
+
+The integration installs from either npm (`npm:mempalace-for-pi`) or this repository (`git:github.com/NoahWTeng/mempalace-for-pi`):
+
+```bash
+pi install git:github.com/NoahWTeng/mempalace-for-pi
+```
+
+Both sources deliver one artifact: the release process pins a packed candidate by SHA-256, and the exact tarball is what npm serves when a release is authorized. Only the transport differs, so pick whichever your project's review policy prefers — installing from Git lets you read the source you are about to run.
 
 ## Install into one project
 
-The verified setup is project-local. It records the package in the project's own `.pi/settings.json` instead of the user account, so a project carries both its integration and its memory settings, and a second computer needs no repeat of any export:
+The setup is project-local. It records the package in the project's own `.pi/settings.json` instead of the user account, so a project carries both its integration and its memory settings, and a second computer needs no repeat of an export:
 
 ```bash
 cd /path/to/your/project
@@ -46,17 +56,17 @@ A project-local install writes project configuration, so Pi asks you to trust th
 
 Both files belong in version control. `.pi/settings.json` records which reviewed source the project uses, and `.pi/mempalace.json` records where the palace lives — written with `~/`, so it resolves on every machine. Every setting is re-read at each start, so a change to either file needs only a restart of Pi.
 
-See [configuration](configuration.md) for the exact document contract and the per-field precedence between the environment and the document.
-
 ## Start locally
 
-The official core's default backend can provision local model assets on first use. Finish that provisioning before enforcing an offline environment. The release matrix used the core's local `sqlite_exact` backend:
+The official core's default backend can provision local model assets on first use. Finish that provisioning before enforcing an offline environment. The verified path uses the core's local `sqlite_exact` backend:
 
 ```bash
 export MEMPALACE_BACKEND=sqlite_exact
 export MEMPALACE_BACKEND_EXPLICIT=sqlite_exact
 pi --approve
 ```
+
+On the first memory operation, the integration automatically starts a per-palace MemPalace Hub on loopback when no healthy writable registration exists. Later calls and later Pi sessions reuse that Hub when it is healthy. The upstream Hub may exit when idle; that is not palace deletion, and the next operation starts or reuses the loopback Hub again. Palace data persists across Pi sessions because the official core owns the palace on disk.
 
 In Pi, first ask: “Use `palace_status` and report whether this project palace is operational.” Then exercise all four tools with non-sensitive synthetic content:
 
@@ -65,6 +75,6 @@ In Pi, first ask: “Use `palace_status` and report whether this project palace 
 3. Ask `palace_diary` to write and then read a short diary entry.
 4. Ask `palace_status` again.
 
-If status reports missing or incompatible core, stop and follow [troubleshooting](troubleshooting.md). For palace selection and safety controls, continue with [configuration](configuration.md). Removing or disabling the integration never removes palace data; see [migration](migration.md).
+If status reports a missing or incompatible core, or the Hub cannot start, stop and follow [troubleshooting](troubleshooting.md). Update both components and restart Pi before retrying. For palace selection and safety controls, continue with [configuration](configuration.md). Removing or disabling the integration never removes palace data; see [migration](migration.md).
 
 Sources: [official MemPalace repository](https://github.com/MemPalace/mempalace) and [Pi package documentation](https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/packages.md).

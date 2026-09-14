@@ -87,7 +87,10 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
 
   function ownedClient(): McpClient {
     if (!client) {
-      client = buildClient(() => mcpServerArgv(options.launcher, options.palace.palacePath), options.cwd);
+      client = buildClient(
+        () => mcpServerArgv(options.launcher, options.palace.palacePath),
+        options.cwd,
+      );
     }
     return client;
   }

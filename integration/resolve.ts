@@ -1,4 +1,5 @@
 import { accessSync, constants, statSync } from 'node:fs';
+import { execFileSync as defaultExecFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
@@ -10,12 +11,23 @@ export type ResolveEnv = Record<string, string | undefined>;
 export interface Launcher {
   readonly mode: 'path' | 'uv' | 'inert';
   readonly mempalaceMcpBin?: string;
+  readonly mempalaceBin?: string;
   readonly dir?: string;
 }
 
 export interface Argv {
   readonly cmd: string;
   readonly args: string[];
+}
+
+export class CorePreflightError extends Error {
+  readonly reason: 'missing' | 'failed' | 'malformed' | 'unsupported';
+
+  constructor(reason: CorePreflightError['reason'], detail: string) {
+    super(`MemPalace 3.9.0 is required: ${detail}`);
+    this.name = 'CorePreflightError';
+    this.reason = reason;
+  }
 }
 
 /** Which declaration selected the palace: temporary, project document, or default. */
@@ -104,7 +116,17 @@ export function resolveOnPath(name: string, env: ResolveEnv, deps: PlatformDeps 
 
 export function resolveLauncher(env: ResolveEnv, deps: PlatformDeps & HomeDeps = {}): Launcher {
   const mempalaceMcpBin = resolveOnPath('mempalace-mcp', env, deps);
-  if (mempalaceMcpBin) return { mode: 'path', mempalaceMcpBin };
+  if (mempalaceMcpBin) {
+    const mempalaceBin = resolveOnPath('mempalace', {
+      ...env,
+      PATH: dirname(mempalaceMcpBin),
+    }, deps);
+    return {
+      mode: 'path',
+      mempalaceMcpBin,
+      ...(mempalaceBin ? { mempalaceBin } : {}),
+    };
+  }
 
   const configuredDirectory = env.MEMPALACE_DIR?.trim();
   if (configuredDirectory) {
@@ -125,6 +147,77 @@ export function mcpServerArgv(launcher: Launcher, palacePath: string): Argv | nu
     };
   }
   return null;
+}
+
+export function hubServerArgv(launcher: Launcher, palacePath: string): Argv | null {
+  const args = ['--transport', 'http', '--host', '127.0.0.1', '--port', '0', '--palace', palacePath];
+  if (launcher.mode === 'path' && launcher.mempalaceMcpBin) {
+    return { cmd: launcher.mempalaceMcpBin, args };
+  }
+  if (launcher.mode === 'uv' && launcher.dir) {
+    return { cmd: 'uv', args: ['run', '--directory', launcher.dir, 'mempalace-mcp', ...args] };
+  }
+  return null;
+}
+
+export function mempalaceVersionArgv(launcher: Launcher): Argv | null {
+  if (
+    launcher.mode === 'path' &&
+    launcher.mempalaceBin &&
+    launcher.mempalaceMcpBin &&
+    dirname(launcher.mempalaceBin) === dirname(launcher.mempalaceMcpBin)
+  ) {
+    return { cmd: launcher.mempalaceBin, args: ['--version'] };
+  }
+  if (launcher.mode === 'uv' && launcher.dir) {
+    return { cmd: 'uv', args: ['run', '--directory', launcher.dir, 'mempalace', '--version'] };
+  }
+  return null;
+}
+
+interface PreflightDeps {
+  readonly execFileSync?: (
+    file: string,
+    args: readonly string[],
+    options: { encoding: 'utf8'; timeout: number },
+  ) => string | Uint8Array;
+}
+
+const preflightCache = new WeakMap<object, string>();
+
+export function preflightLauncher(launcher: Launcher, deps: PreflightDeps = {}): string {
+  const cached = preflightCache.get(launcher as object);
+  if (cached) return cached;
+  const argv = mempalaceVersionArgv(launcher);
+  if (!argv) {
+    throw new CorePreflightError(
+      'missing',
+      'the matching `mempalace` CLI was not found. Install MemPalace 3.9.0 and make both console scripts available.',
+    );
+  }
+  const execFileSync = deps.execFileSync ?? defaultExecFileSync;
+  let output: string;
+  try {
+    output = String(execFileSync(argv.cmd, argv.args, { encoding: 'utf8', timeout: 10_000 }));
+  } catch {
+    throw new CorePreflightError(
+      'failed',
+      'the `mempalace --version` preflight failed. Install MemPalace 3.9.0 and check the selected environment.',
+    );
+  }
+  const value = output.trim();
+  if (value !== 'MemPalace 3.9.0') {
+    const reported = /^MemPalace ([^\r\n]{1,32})$/u.exec(value)?.[1];
+    if (reported) {
+      throw new CorePreflightError('unsupported', `the installed core reports ${reported}; upgrade it first.`);
+    }
+    throw new CorePreflightError(
+      'malformed',
+      'the `mempalace --version` output was malformed. Install MemPalace 3.9.0 and retry.',
+    );
+  }
+  preflightCache.set(launcher as object, value);
+  return value;
 }
 
 /**

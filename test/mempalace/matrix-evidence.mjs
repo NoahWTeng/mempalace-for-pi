@@ -12,6 +12,11 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const MATRIX_FIELDS = ['candidateSha256', 'cells', 'generatedAt', 'schemaVersion', 'sourceCommit', 'sourceTree'];
 const CELL_FIELDS = [
+  'arch', 'candidateSha256', 'core', 'lifecycle', 'migrationRecordsAfter', 'migrationRecordsBefore',
+  'migrationRetainedPercent', 'migrationSyntheticPredecessor', 'networkAttempts', 'nodeDeclared',
+  'nodeRuntime', 'outcome', 'pi', 'platform', 'sourceCommit', 'sourceTree',
+];
+const LEGACY_CELL_FIELDS = [
   'arch', 'candidateSha256', 'core', 'lifecycle', 'networkAttempts', 'nodeDeclared', 'nodeRuntime',
   'outcome', 'pi', 'platform', 'recordsAfter', 'recordsBefore', 'retainedPercent', 'sourceCommit',
   'sourceTree', 'syntheticPredecessor',
@@ -112,10 +117,15 @@ function assertMatrixShape(evidence) {
   assert.match(evidence.generatedAt, ISO, 'matrix generatedAt is malformed');
   assert.equal(new Date(evidence.generatedAt).toISOString(), evidence.generatedAt, 'matrix generatedAt is not canonical');
   assert(Array.isArray(evidence.cells) && evidence.cells.length > 0, 'matrix cells are empty');
+  const legacy = Object.hasOwn(evidence.cells[0], 'recordsBefore');
+  const cellFields = legacy ? LEGACY_CELL_FIELDS : CELL_FIELDS;
+  const retentionFields = legacy
+    ? ['recordsBefore', 'recordsAfter', 'retainedPercent', 'syntheticPredecessor']
+    : ['migrationRecordsBefore', 'migrationRecordsAfter', 'migrationRetainedPercent', 'migrationSyntheticPredecessor'];
   for (const [index, cell] of evidence.cells.entries()) {
     const label = `matrix cell ${index + 1}`;
     assert(cell && typeof cell === 'object' && !Array.isArray(cell), `${label} must be an object`);
-    exactKeys(cell, CELL_FIELDS, label);
+    exactKeys(cell, cellFields, label);
     for (const field of ['platform', 'arch', 'nodeDeclared', 'nodeRuntime', 'pi', 'core', 'outcome', 'sourceCommit', 'sourceTree']) {
       assert.equal(typeof cell[field], 'string', `${label} ${field} is not a string`);
     }
@@ -124,11 +134,11 @@ function assertMatrixShape(evidence) {
     assert.match(cell.candidateSha256, SHA256, `${label} candidate digest is malformed`);
     assert.match(cell.nodeRuntime, /^v\d+\.\d+\.\d+$/u, `${label} runtime version is malformed`);
     assert.equal(cell.outcome, 'PASS', `${label} did not PASS`);
-    assert.equal(cell.recordsBefore, 5, `${label} did not measure five records before`);
-    assert.equal(cell.recordsAfter, 5, `${label} did not retain five records`);
-    assert.equal(cell.retainedPercent, 100, `${label} did not retain 100%`);
+    assert.equal(cell[retentionFields[0]], 5, `${label} did not measure five records before`);
+    assert.equal(cell[retentionFields[1]], 5, `${label} did not retain five records`);
+    assert.equal(cell[retentionFields[2]], 100, `${label} did not retain 100%`);
     assert.equal(cell.networkAttempts, 0, `${label} attempted non-loopback network`);
-    assert.equal(cell.syntheticPredecessor, true, `${label} lacks predecessor evidence`);
+    assert.equal(cell[retentionFields[3]], true, `${label} lacks predecessor evidence`);
     assert(Array.isArray(cell.lifecycle) && cell.lifecycle.length > 0, `${label} has no lifecycle evidence`);
     assert(cell.lifecycle.every((phase) => typeof phase === 'string' && phase.length > 0), `${label} has malformed lifecycle evidence`);
   }

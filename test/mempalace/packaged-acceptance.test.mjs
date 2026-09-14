@@ -31,6 +31,12 @@ function runScript(script, args, env) {
   });
 }
 
+function runNodeScript(script, args, env) {
+  return spawnSync(process.execPath, [script, ...args], {
+    cwd: new URL('../..', import.meta.url), encoding: 'utf8', env,
+  });
+}
+
 function commands(log) {
   return existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) : [];
 }
@@ -43,11 +49,110 @@ test('packaged gate declares the exact supported matrix and real Pi lifecycle', 
   for (const command of [' install ', ' list', ' remove ']) assert.ok(gate.includes(command), `missing Pi lifecycle command: ${command}`);
   assert.doesNotMatch(gate, /-e "\$package_dir/u, 'installed integration must be package-discovered, never force-loaded');
   assert.match(gate, /MEMPALACE_PROVIDER_EXPECT_DISABLED/u);
-  assert.match(gate, /unset UV_EXTRA_INDEX_URL UV_INDEX UV_INDEX_URL UV_DEFAULT_INDEX UV_FIND_LINKS/u);
+  assert.match(gate, /sanitize_registry_env/u);
+  assert.match(gate, /npm_config_\*\|uv_\*\|pip_\*/u);
   assert.match(gate, /--index-strategy first-index/u);
   assert.match(gate, /PYTHONDONTWRITEBYTECODE=1/u, 'acceptance must not dirty the verified source tree');
   assert.match(gate, /synthetic-predecessor-0\.0\.9/u);
   assert.match(gate, /assert_snapshot/u);
+});
+
+test('the 3.9.0 packaged path sanitizes arbitrary registry prefixes before execution', () => {
+  const passing = probe();
+  executable(join(passing.root, 'bin', 'bash'), `#!/bin/sh
+if [ "$1" = "scripts/gate-core.sh" ]; then
+  printf 'global=%s\\n' "$(/usr/bin/printenv NPM_CONFIG_GLOBALCONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+  printf 'scoped=%s\\n' "$(/usr/bin/printenv 'npm_config_@scope:registry' 2>/dev/null || true)" >> "$PROBE_LOG"
+  printf 'userconfig=%s\\n' "$(/usr/bin/printenv NPM_CONFIG_USERCONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+  printf 'uvconfig=%s\\n' "$(/usr/bin/printenv UV_NO_CONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+  exit 23
+fi
+exec /bin/bash "$@"
+`);
+  const env = {
+    ...passing.env,
+    NPM_CONFIG_GLOBALCONFIG: '/tmp/global-config',
+    'npm_config_@scope:registry': 'https://attacker.invalid/npm',
+  };
+  try {
+    const result = runScript('scripts/gate-packaged.sh', ['--mempalace-version', '3.9.0', '--attested'], env);
+    assert.equal(result.status, 23);
+    assert.deepEqual(commands(passing.log), [
+      'global=',
+      'scoped=',
+      'userconfig=/dev/null',
+      'uvconfig=1',
+    ]);
+  } finally {
+    rmSync(passing.root, { recursive: true, force: true });
+  }
+});
+
+test('packaged gate preserves its selector while sanitizing registry environment', () => {
+  const passing = probe();
+  executable(join(passing.root, 'bin', 'bash'), `#!/bin/sh
+printf 'bash %s\\n' "$*" >> "$PROBE_LOG"
+if [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi
+exec /bin/bash "$@"
+`);
+  try {
+    const result = runScript('scripts/gate-packaged.sh', ['--mempalace-version', '3.9.0'], {
+      ...passing.env,
+      NPM_CONFIG_GLOBALCONFIG: '/tmp/global-config',
+      'npm_config_@scope:registry': 'https://attacker.invalid/npm',
+    });
+    assert.equal(result.status, 23);
+    assert.deepEqual(commands(passing.log), ['bash scripts/gate-core.sh --pre-attestation']);
+  } finally {
+    rmSync(passing.root, { recursive: true, force: true });
+  }
+});
+
+test('packaged acceptance removes arbitrary registry settings before child install', () => {
+  const root = mkdtempSync(join(tmpdir(), 'mempalace-registry-probe-'));
+  const bin = join(root, 'bin');
+  const log = join(root, 'install.log');
+  const tarball = join(root, 'candidate.tgz');
+  mkdirSync(bin);
+  writeFileSync(tarball, 'candidate');
+  executable(join(bin, 'npm'), `#!/bin/sh
+printf 'global=%s\\n' "$(/usr/bin/printenv NPM_CONFIG_GLOBALCONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+printf 'scoped=%s\\n' "$(/usr/bin/printenv 'npm_config_@scope:registry' 2>/dev/null || true)" >> "$PROBE_LOG"
+printf 'userconfig=%s\\n' "$(/usr/bin/printenv NPM_CONFIG_USERCONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+printf 'uvconfig=%s\\n' "$(/usr/bin/printenv UV_NO_CONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+exit 23
+`);
+  try {
+    const result = runNodeScript('scripts/acceptance-concurrency.mjs', ['--tarball', tarball], {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ''}`,
+      PROBE_LOG: log,
+      NPM_CONFIG_GLOBALCONFIG: '/tmp/global-config',
+      'npm_config_@scope:registry': 'https://attacker.invalid/npm',
+    });
+    assert.notEqual(result.status, 0);
+    assert.deepEqual(commands(log), [
+      'global=',
+      'scoped=',
+      'userconfig=/dev/null',
+      'uvconfig=1',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the verified CI matrix selects attested packaged mode', () => {
+  const workflow = read('.github/workflows/ci.yml');
+  const matrix = workflow.split('\n  macos-arm64:\n')[1]?.split('\n  matrix-evidence:\n')[0] ?? '';
+  assert.match(matrix, /bash scripts\/gate-release\.sh[\s\S]*--attested/u);
+});
+
+test('acceptance registers the linked worktree before attempting to add it', () => {
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  const assignment = acceptance.indexOf("linkedRoot = join(tempRoot, 'linked');");
+  const add = acceptance.indexOf("['worktree', 'add', '--detach', '--quiet', linkedRoot, 'HEAD']");
+  assert.ok(assignment >= 0 && add >= 0 && assignment < add, 'cleanup must know the linked worktree before registration can fail');
 });
 
 // The project document is released by the host, not by the package, so the
@@ -112,11 +217,13 @@ test('the packaged real provider composes only after a trusted session start', (
   assert.match(provider, /isProjectTrusted/u, 'the harness must state the trust decision it grants');
 });
 
-test('CI pairs Pi 0.84.2 with both supported MemPalace versions', () => {
+test('CI prepares the verified Pi 0.84.2 and MemPalace 3.9.0 matrix', () => {
   const workflow = read('.github/workflows/ci.yml');
+  assert.match(workflow, /node-version:\s*\[22\.19\.0, 24\.x\]/u);
   assert.match(workflow, /pi-version:\s*\[0\.84\.2\]/u);
-  assert.match(workflow, /mempalace-version:\s*\[3\.6\.0, 3\.7\.1\]/u);
+  assert.match(workflow, /mempalace-version:\s*\[3\.9\.0\]/u);
   assert.match(workflow, /gate-release\.sh[\s\S]*--mempalace-version/u);
+  assert.doesNotMatch(workflow, /linux-arm64:|windows:|win32/u);
 });
 
 test('Node and Python guards deny every routine network API family', () => {
@@ -204,6 +311,70 @@ test('core gate runs static, full, and focused suites with fail-fast propagation
   }
 });
 
+test('pre-attestation core mode binds the current candidate and checks stale evidence separately', () => {
+  const gate = read('scripts/gate-core.sh');
+  assert.match(gate, /--pre-attestation/u);
+  assert.match(gate, /EXPECTED_CANDIDATE_SHA256/u);
+  assert.match(gate, /EXPECTED_SOURCE_COMMIT/u);
+  assert.match(gate, /npm test/u);
+  assert.match(gate, /unanchored/u);
+});
+
+test('concurrency waits for every unique save before the first search', () => {
+  const provider = read('test/mempalace/fixtures/packaged-provider.ts');
+  const uniqueSave = provider.indexOf("['palace_save', { content: unique[id],");
+  const firstSearch = provider.indexOf("...unique.map((content) => ['palace_search',");
+  const completion = provider.indexOf("const completed = calls[step - 1]?.[0];", uniqueSave);
+  const saved = provider.indexOf("if (completed === 'palace_save' && step === 1)", completion);
+  const marker = provider.indexOf("mark(root, 'saved', id);", saved);
+  const barrier = provider.indexOf("waitForAll(root, 'saved', count);", marker);
+  const dispatch = provider.indexOf('const next = calls[step++];', completion);
+  assert.ok(uniqueSave >= 0);
+  assert.ok(firstSearch > uniqueSave);
+  assert.ok(completion > uniqueSave);
+  assert.ok(saved > completion);
+  assert.ok(marker > saved);
+  assert.ok(barrier > marker);
+  assert.ok(dispatch > barrier);
+});
+
+test('3.9.0 packaged gate runs the real concurrency and migration acceptance', () => {
+  const gate = read('scripts/gate-packaged.sh');
+  assert.match(gate, /bash scripts\/gate-core\.sh --pre-attestation/u);
+  assert.match(gate, /acceptance-concurrency\.mjs/u);
+});
+
+test('3.9.0 packaged gate is safe when no tarball is selected under nounset', () => {
+  const gate = read('scripts/gate-packaged.sh');
+  assert.doesNotMatch(gate, /\$\{acceptance_args\[@\]\}/u);
+});
+
+test('migration acceptance promotes the copied legacy palace before reads', () => {
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  assert.match(acceptance, /migrated\.call\('mempalace_add_drawer'/u);
+  assert.match(acceptance, /migrationProbe\.reason, 'already_exists'/u);
+});
+
+test('Hub replacement assertion compares against every observed PID', () => {
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  assert.match(acceptance, /const observedHubPids = readPids\(hubPidLog\)/u);
+  assert.match(acceptance, /observedHubPids\.some\(\(pid\) => pid !== firstInfo\.pid\)/u);
+});
+
+test('acceptance cleanup handles termination signals within a bounded window', () => {
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  assert.match(acceptance, /process\.once\('SIGTERM'/u);
+  assert.match(acceptance, /process\.once\('SIGINT'/u);
+  assert.match(acceptance, /CLEANUP_TIMEOUT_MS/u);
+});
+
+test('concurrency kills the Hub only after every peer reaches the safe barrier', () => {
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  const barrier = acceptance.indexOf("marker('ready', id)");
+  const kill = acceptance.indexOf("signalOwned('hub', firstInfo.pid, 'SIGKILL')");
+  assert.ok(barrier >= 0 && barrier < kill);
+});
+
 test('packaged gate runs core first and separates the explicit future selector', () => {
   const gate = read('scripts/gate-packaged.sh');
   assert.match(gate, /ACCEPTANCE_VERSIONS/iu);
@@ -211,7 +382,17 @@ test('packaged gate runs core first and separates the explicit future selector',
   assert.match(gate, /bash scripts\/gate-core\.sh/u);
   assert.match(gate, /packaged-real-provider\.mjs/u);
   assert.match(gate, /MEMPALACE_VERSIONS=\("3\.6\.0" "3\.7\.1"\)/u);
-  assert.doesNotMatch(read('integration/compatibility.ts'), /3\.9\.0/u);
+  assert.match(read('scripts/gate-community-mempalace.sh'), /--mempalace-version 3\.9\.0 --attested/u);
+  assert.match(read('scripts/gate-community-mempalace.sh'), /release:check -- --mempalace-version 3\.9\.0 --attested/u);
+  assert.match(read('scripts/gate-release.sh'), /attested=true/u);
+  assert.match(read('scripts/gate-release.sh'), /acceptance_args\+=\(--attested\)/u);
+  const acceptanceExtension = read('scripts/acceptance-extension.mjs');
+  assert.match(acceptanceExtension, /value === '--attested'/u);
+  assert.match(acceptanceExtension, /args\.push\('--attested'\)/u);
+  const compatibility = read('integration/compatibility.ts');
+  assert.doesNotMatch(compatibility, /mempalace: '3\.6\.0', verification: 'verified'/u);
+  assert.doesNotMatch(compatibility, /mempalace: '3\.7\.1', verification: 'verified'/u);
+  assert.match(compatibility, /mempalace: '3\.9\.0', verification: 'verified'/u);
 
   const passing = probe();
   executable(join(passing.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi\nexec /bin/bash "$@"\n');
@@ -229,9 +410,45 @@ test('packaged gate runs core first and separates the explicit future selector',
   try {
     const result = runScript('scripts/gate-packaged.sh', ['--mempalace-version', '3.9.0'], explicit.env);
     assert.equal(result.status, 23);
-    assert.deepEqual(commands(explicit.log), ['bash scripts/gate-core.sh']);
+    assert.deepEqual(commands(explicit.log), ['bash scripts/gate-core.sh --pre-attestation']);
   } finally {
     rmSync(explicit.root, { recursive: true, force: true });
+  }
+
+  const attested = probe();
+  executable(join(attested.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi\nexec /bin/bash "$@"\n');
+  try {
+    const result = runScript('scripts/gate-packaged.sh', ['--mempalace-version', '3.9.0', '--attested'], attested.env);
+    assert.equal(result.status, 23);
+    assert.deepEqual(commands(attested.log), ['bash scripts/gate-core.sh']);
+  } finally {
+    rmSync(attested.root, { recursive: true, force: true });
+  }
+
+  const forwarded = probe();
+  executable(join(forwarded.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi\nexec /bin/bash "$@"\n');
+  try {
+    const result = runNodeScript('scripts/acceptance-extension.mjs', [
+      '--smoke', '--runs', '1', '--mempalace-version', '3.9.0', '--attested',
+    ], forwarded.env);
+    assert.equal(result.status, 1);
+    assert.deepEqual(commands(forwarded.log), [
+      'bash scripts/gate-packaged.sh --mempalace-version 3.9.0 --attested',
+      'bash scripts/gate-core.sh',
+    ]);
+  } finally {
+    rmSync(forwarded.root, { recursive: true, force: true });
+  }
+
+  const invalidMode = probe();
+  executable(join(invalidMode.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nexec /bin/bash "$@"\n');
+  try {
+    const result = runNodeScript('scripts/acceptance-extension.mjs', ['--smoke', '--runs', '1', '--attested'], invalidMode.env);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /requires --mempalace-version 3\.9\.0/u);
+    assert.deepEqual(commands(invalidMode.log), ['bash scripts/gate-packaged.sh --attested']);
+  } finally {
+    rmSync(invalidMode.root, { recursive: true, force: true });
   }
 
   const unsupported = probe();

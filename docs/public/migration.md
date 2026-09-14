@@ -2,6 +2,18 @@
 
 The integration lifecycle and palace lifecycle are separate. Every procedure here changes only Pi package/configuration state. It never moves or deletes palace data. Back up palace data with the official core's procedure before changing versions or paths.
 
+## Support-floor transition
+
+MemPalace `3.9.0` is the verified support floor for the automatic loopback Hub. It is incompatible with the older `3.6.0` and `3.7.1` core pairings used by the historical four-cell matrix, which remain migration-only evidence. Update both components before starting Pi:
+
+```bash
+uv tool install --python 3.12 'mempalace==3.9.0'
+pi remove -l npm:mempalace-for-pi --approve
+pi install -l npm:mempalace-for-pi --approve
+```
+
+Use the reviewed Git source instead when that is the source already configured for the project. Restart Pi after both updates. The daily `palace_search`, `palace_save`, `palace_diary`, and `palace_status` workflow remains unchanged. The integration automatically starts a per-palace Hub on loopback or reuses a healthy registration; palace data persists across Pi sessions even when the upstream Hub exits after being idle. If startup fails, use [troubleshooting](troubleshooting.md) before retrying a write.
+
 ## From a private bridge
 
 A retained palace is reconnected, never moved. The cutover needs no account, no sign-in, and no stored secret of any kind: it is a path and a restart.

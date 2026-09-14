@@ -60,7 +60,7 @@ test('the manifest publishes under exactly the intended identity', () => {
   const manifest = readManifest();
   assert.equal(manifest.private, undefined, 'a private manifest cannot be published');
   assert.equal(manifest.name, 'mempalace-for-pi');
-  assert.equal(manifest.version, '0.2.0');
+  assert.equal(manifest.version, '1.0.0');
   // Left undefined deliberately: an unscoped package already publishes publicly
   // to the default registry, so the only thing a publishConfig could do here is
   // redirect the release somewhere the reader is not expecting.
@@ -104,10 +104,9 @@ test('only Pi-bundled packages are declared as peers and nothing is bundled', ()
 test('compatibility declares only the Pi and MemPalace versions Task 6 will verify', async () => {
   const compatibility = await loadCompatibility();
   assert.deepEqual([...compatibility.SUPPORTED_PI_VERSIONS], ['0.84.2']);
-  assert.deepEqual([...compatibility.SUPPORTED_MEMPALACE_VERSIONS], ['3.6.0', '3.7.1']);
+  assert.deepEqual([...compatibility.SUPPORTED_MEMPALACE_VERSIONS], ['3.9.0']);
   assert.deepEqual(compatibility.COMPATIBILITY_PAIRINGS, [
-    { pi: '0.84.2', mempalace: '3.6.0', verification: 'verified' },
-    { pi: '0.84.2', mempalace: '3.7.1', verification: 'verified' },
+    { pi: '0.84.2', mempalace: '3.9.0', verification: 'verified' },
   ]);
 });
 
@@ -128,9 +127,9 @@ test('every declared version combination has a pairing entry', async () => {
   const expected = compatibility.SUPPORTED_PI_VERSIONS.flatMap((pi) =>
     compatibility.SUPPORTED_MEMPALACE_VERSIONS.map((mempalace) => `${pi}+${mempalace}`),
   ).sort();
-  const declared = compatibility.COMPATIBILITY_PAIRINGS.map(
-    (pairing) => `${pairing.pi}+${pairing.mempalace}`,
-  ).sort();
+  const declared = compatibility.COMPATIBILITY_PAIRINGS
+    .map((pairing) => `${pairing.pi}+${pairing.mempalace}`)
+    .sort();
   assert.deepEqual(
     declared,
     expected,
@@ -274,6 +273,16 @@ test('the aggregator derives its expected cells from the declared surface', () =
   }
 });
 
+test('verified matrix retention fields name their migration journey', () => {
+  const matrix = readRepositoryFile('test/mempalace/matrix-evidence.mjs');
+  const acceptance = readRepositoryFile('scripts/acceptance-concurrency.mjs');
+  for (const field of ['migrationRecordsBefore', 'migrationRecordsAfter', 'migrationRetainedPercent', 'migrationSyntheticPredecessor']) {
+    assert.match(matrix, new RegExp(`\\b${field}\\b`, 'u'));
+    assert.match(acceptance, new RegExp(`\\b${field}\\b`, 'u'));
+  }
+  assert.doesNotMatch(matrix, /cell\.recordsBefore|cell\.recordsAfter|cell\.retainedPercent|cell\.syntheticPredecessor/u);
+});
+
 test('the CI gate keeps host integrity checks without Linux product execution', () => {
   const workflow = readRepositoryFile('.github/workflows/ci.yml');
   const gate = readRepositoryFile('scripts/gate-ci.sh');
@@ -384,6 +393,13 @@ function selectedSuites(command: string): string[] {
 // its body contains no suite path, so it can never satisfy the assertions.
 function releaseGateChecks(source: string): string[] {
   return source.split('runCheck(').slice(1).map((rest) => rest.slice(0, rest.indexOf(');')));
+}
+
+function withoutMatrixAnchors(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.EXPECTED_CANDIDATE_SHA256;
+  delete env.EXPECTED_SOURCE_COMMIT;
+  return env;
 }
 
 type WorkflowPath = '.github/workflows/ci.yml' | '.github/workflows/release.yml';
@@ -538,7 +554,7 @@ test('a failed release check keeps a bounded transcript of its child command', (
     const blocked = spawnSync(process.execPath, ['scripts/release-gate.mjs', '--runs', '1'], {
       cwd: root,
       encoding: 'utf8',
-      env: { ...process.env, PI_BINARY: failing, RELEASE_EVIDENCE_DIR: evidenceDirectory },
+      env: { ...withoutMatrixAnchors(), PI_BINARY: failing, RELEASE_EVIDENCE_DIR: evidenceDirectory },
     });
     assert.notEqual(blocked.status, 0, 'a failed child command must not exit 0');
 
@@ -592,7 +608,7 @@ test('a failed release check redacts credentials and private paths from its tran
     const blocked = spawnSync(process.execPath, ['scripts/release-gate.mjs', '--runs', '1'], {
       cwd: root,
       encoding: 'utf8',
-      env: { ...process.env, PI_BINARY: leaking, RELEASE_EVIDENCE_DIR: evidenceDirectory },
+      env: { ...withoutMatrixAnchors(), PI_BINARY: leaking, RELEASE_EVIDENCE_DIR: evidenceDirectory },
     });
     assert.notEqual(blocked.status, 0, 'a leaking child command must not exit 0');
 
@@ -624,7 +640,8 @@ test('packaged acceptance asserts the package identity the manifest declares', (
 
 test('a pairing may only claim verification with complete SHA-bound matrix evidence', async () => {
   const compatibility = await loadCompatibility();
-  const verified = compatibility.COMPATIBILITY_PAIRINGS.filter(({ verification }) => verification === 'verified');
+  const verified = compatibility.COMPATIBILITY_PAIRINGS.filter(({ verification, mempalace }) =>
+    verification === 'verified' && compatibility.SUPPORTED_MEMPALACE_VERSIONS.includes(mempalace as never));
   if (verified.length === 0) return;
 
   const evidencePath = join(root, '.github', 'verification', 'task-967-matrix.json');
@@ -679,7 +696,7 @@ test('a pairing may only claim verification with complete SHA-bound matrix evide
   assert.ok(evidence.cells.every((cell: Record<string, unknown>) =>
     cell.candidateSha256 === evidence.candidateSha256 && cell.sourceCommit === evidence.sourceCommit &&
     cell.sourceTree === evidence.sourceTree && cell.outcome === 'PASS'));
-  assert.deepEqual(verified.map(({ mempalace }) => mempalace).sort(), ['3.6.0', '3.7.1']);
+  assert.deepEqual(verified.map(({ mempalace }) => mempalace).sort(), ['3.9.0']);
 });
 
 function historicalMatrix(): Record<string, any> {

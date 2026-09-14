@@ -11,11 +11,15 @@ mempalace --version
 command -v mempalace-mcp
 ```
 
-Reinstall the official core using [install](install.md), or set `MEMPALACE_DIR` to a reviewed official checkout. Restart Pi after changing the environment.
+Reinstall or update the official core to verified MemPalace `3.9.0` using [install](install.md), update `mempalace-for-pi` from the same approved source, and restart Pi after changing either component or the environment.
 
 ## Unsupported version
 
-Only MemPalace `3.6.0` and `3.7.1` are accepted. An unsupported version warning leaves the integration inert and terminates the rejected core process. Install one exact tested version; do not bypass negotiation. Check the full [compatibility matrix](compatibility.md).
+The verified support floor requires MemPalace `3.9.0`. The older `3.6.0` and `3.7.1` pairings belong only to the historical migration evidence and are not accepted by the current runtime. An unsupported version warning leaves the integration inert and terminates the rejected core process. Update MemPalace and `mempalace-for-pi` together, restart Pi, and do not bypass negotiation. Check the full [compatibility matrix](compatibility.md).
+
+## Hub unavailable or idle
+
+On the first memory operation, the integration automatically starts a per-palace Hub on loopback when no healthy writable registration exists and reuses a healthy registration when one is present. The upstream Hub may exit after it is idle; the palace data remains on disk across Pi sessions, and the next operation starts or reuses the Hub again. A Hub startup failure keeps the integration inert and dispatches no memory tool. Update both components to the verified versions, confirm `mempalace-mcp` and `mempalace` resolve from the same environment, and restart Pi before retrying.
 
 ## The project document was refused
 
@@ -60,8 +64,8 @@ No package-owned process should remain. If one remains, do not start another wri
 ## Recover from inert mode
 
 1. Exit Pi.
-2. Correct the core version, executable path, palace permission, or configuration.
+2. Correct the verified core version, executable path, palace permission, or configuration.
 3. Confirm `MEMPALACE_BRIDGE_DISABLE` is not `1`.
-4. Restart Pi and ask for `palace_status`.
+4. Restart Pi and ask for `palace_status`; the Hub will start or be reused on the first memory operation.
 
 Do not delete or move palace data as an inert-mode recovery step. Disable/remove/reinstall instructions are in [migration](migration.md).

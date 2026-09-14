@@ -35,23 +35,23 @@ flowchart LR
     MCP --> Palace[(Local palace)]
 ```
 
-The integration handles Pi lifecycle, project identity, tool registration, and safety controls. The separately installed MemPalace core remains responsible for storage, retrieval, and migrations.
+The integration handles Pi lifecycle, project identity, tool registration, and safety controls. With the verified MemPalace `3.9.0` support floor, it automatically starts a per-palace loopback Hub when no healthy registration exists and reuses a healthy Hub when one is already running. Palace data persists across Pi sessions; the upstream Hub may exit when idle, and the next operation starts or reuses it again. The separately installed MemPalace core remains responsible for storage, retrieval, and migrations.
 
 ## Quick start
 
-### 1. Install the verified macOS ARM64 toolchain
+### 1. Install the verified macOS ARM64 support floor
 
-The current support contract is macOS ARM64 only. Linux is withdrawn from the current package contract; Windows remains outside scope.
+The verified support contract requires MemPalace `3.9.0` on macOS ARM64, Node `22.19.0` or `24.x`, and Pi `0.84.2`. Linux is withdrawn from the current package contract and Windows remains outside scope.
 
 ```bash
-uv tool install --python 3.12 'mempalace==3.7.1'
+uv tool install --python 3.12 'mempalace==3.9.0'
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.84.2
 
 mempalace --version
 pi --version
 ```
 
-MemPalace `3.6.0` is also verified on macOS ARM64. See the exact [compatibility matrix](docs/public/compatibility.md) before choosing another version.
+For an existing installation, update both MemPalace and `mempalace-for-pi` from the same approved source, then restart Pi. The exact procedure is in the [installation guide](docs/public/install.md).
 
 ### 2. Install the integration into your project
 
@@ -93,7 +93,7 @@ Then ask Pi:
 
 > Use `palace_status` and report whether this project palace is operational.
 
-Continue with non-sensitive test content: save one finding, search for it, write and read one diary entry, then check status again. The complete walkthrough lives in the [installation guide](docs/public/install.md).
+Continue with non-sensitive test content: save one finding, search for it, write and read one diary entry, then check status again. Daily `palace_search`, `palace_save`, `palace_diary`, and `palace_status` behavior remains unchanged through the Hub transition. The complete walkthrough lives in the [installation guide](docs/public/install.md).
 
 ## Tools
 
@@ -131,7 +131,7 @@ Environment variables win over the project document, field by field, and the doc
 
 ## Privacy boundary
 
-The verified path is local-first. After provisioning, routine wake-up, search, save, diary, status, and handoff operations require no non-loopback network access.
+The verified support-floor path remains local-first. After provisioning, routine wake-up, search, save, diary, status, and handoff operations use the loopback Hub and require no routine non-loopback network access.
 
 Two boundaries remain outside this claim:
 
@@ -142,30 +142,20 @@ The integration does not discover, copy, merge, migrate, move, or delete another
 
 ## Verified compatibility
 
-The current release candidate passed all four combinations in this macOS ARM64 cross-product:
+The verified support floor is MemPalace `3.9.0` on macOS ARM64 with exactly two cells: Node `22.19.0` and `24.x`, each with Pi `0.84.2`. Both cells produced exact, SHA-bound PASS evidence.
 
-| Component | Verified values |
-| --- | --- |
-| Platform | macOS arm64 |
-| Node.js | `22.19.0`, `24.x` |
-| Pi | `0.84.2` |
-| MemPalace | `3.6.0`, `3.7.1` |
-| Python | `3.12` |
-
-Every cell retained 5/5 exact records, reported 100% retention, observed zero guarded non-loopback attempts during routine post-provisioning operations, and released owned resources within five seconds. Earlier Linux rows remain historical evidence only and are not a current support claim.
-
-This is an exhaustive support matrix—not a minimum-version promise. See [compatibility](docs/public/compatibility.md) for every cell and the full evidence boundary.
+MemPalace `3.6.0` and `3.7.1` remain historical migration context only; they are not the current support floor or a current PASS claim. See [compatibility](docs/public/compatibility.md) for the exact current matrix and historical boundary.
 
 ## Documentation
 
 | Guide | Covers |
 | --- | --- |
-| [Installation](docs/public/install.md) | Prerequisites, verified setup, and first use. |
+| [Installation](docs/public/install.md) | Verified support-floor setup, updates, Hub startup, and first use. |
 | [Configuration](docs/public/configuration.md) | Environment controls, project identity, worktrees, and write policy. |
 | [Privacy](docs/public/privacy.md) | Storage, networking, non-retention, and credential boundaries. |
 | [Migration](docs/public/migration.md) | Existing palaces, disable, removal, reinstall, upgrade, and rollback. |
 | [Troubleshooting](docs/public/troubleshooting.md) | Missing core, timeouts, permissions, compatibility, and cleanup. |
-| [Compatibility](docs/public/compatibility.md) | Exact supported matrix and verification scope. |
+| [Compatibility](docs/public/compatibility.md) | Verified current matrix and historical migration scope. |
 
 ## Development
 

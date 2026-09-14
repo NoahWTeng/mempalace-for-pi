@@ -92,7 +92,7 @@ rl.on('line', (line) => {
       result: {
         protocolVersion: '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'fake-mempalace', version: mode === 'incompatible' ? '9.9.9' : '3.7.1' },
+        serverInfo: { name: 'fake-mempalace', version: mode === 'incompatible' ? '9.9.9' : '3.9.0' },
       },
     });
     return;
@@ -106,6 +106,15 @@ rl.on('line', (line) => {
     const args = msg.params?.arguments ?? {};
 
     if ((mode === 'grandchild-hang' || mode === 'orphan-hang') && name !== 'mempalace_status') return;
+
+    if (mode === 'hub-proxy-failed' && name === 'mempalace_add_drawer') {
+      send({
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: { code: -32000, message: 'palace hub proxy failed: connection reset' },
+      });
+      return;
+    }
 
     if (name === 'mempalace_add_drawer' && args.wing === '__refuse__') {
       send({

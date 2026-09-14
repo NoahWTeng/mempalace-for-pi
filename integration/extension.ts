@@ -8,11 +8,14 @@ import {
   readProjectConfig,
   type ProjectConfig,
 } from './config.ts';
+import { createHub as defaultCreateHub, type HubRuntime } from './hub.ts';
 import { createLifecycle, type Lifecycle, type LifecycleState, type LifecycleStatus } from './lifecycle.ts';
-import { createMcpClient as defaultCreateMcpClient, type McpClient } from './mcp-client.ts';
+import { createMcpClient as defaultCreateMcpClient, type McpClient, type McpClientDeps } from './mcp-client.ts';
 import {
+  CorePreflightError,
   PalaceAccessError,
   mcpServerArgv,
+  preflightLauncher as defaultPreflightLauncher,
   resolveLauncher as defaultResolveLauncher,
   resolvePalace as defaultResolvePalace,
   type Launcher,
@@ -45,6 +48,8 @@ export interface CreateExtensionOptions {
   readonly handoff?: boolean;
   readonly recall?: boolean;
   readonly resolveLauncher?: (env: ResolveEnv) => Launcher;
+  readonly preflightLauncher?: (launcher: Launcher) => string;
+  readonly createHub?: (launcher: Launcher, palacePath: string) => HubRuntime;
   readonly resolvePalace?: (
     env: ResolveEnv,
     cwd: string,
@@ -53,11 +58,12 @@ export interface CreateExtensionOptions {
   readonly createMcpClient?: (
     resolveArgv: () => ReturnType<typeof mcpServerArgv>,
     cwd: string,
+    deps?: McpClientDeps,
   ) => McpClient;
   readonly captureWakeUp?: (client: McpClient) => Promise<string>;
 }
 
-const CORE_UNAVAILABLE = 'MemPalace is unavailable. Install MemPalace 3.6.0 or 3.7.1, then restart Pi.';
+const CORE_UNAVAILABLE = 'MemPalace is unavailable. Install MemPalace 3.9.0, then restart Pi.';
 const PALACE_UNAVAILABLE =
   'MemPalace palace selection failed. Check MEMPALACE_PALACE and project access, then restart Pi.';
 const CONFIG_UNUSABLE = `MemPalace could not use ${PROJECT_CONFIG_LOCATION}. Correct or remove it, then restart Pi.`;
@@ -165,6 +171,12 @@ export function createExtension(
     }
     if (launcher.mode === 'inert') return refuse('inert', CORE_UNAVAILABLE);
 
+    try {
+      (options.preflightLauncher ?? defaultPreflightLauncher)(launcher);
+    } catch (error) {
+      return refuse('inert', error instanceof CorePreflightError ? error.message : CORE_UNAVAILABLE);
+    }
+
     let palace: PalaceResolution;
     try {
       palace = (options.resolvePalace ?? defaultResolvePalace)(env, cwd, { config });
@@ -178,9 +190,17 @@ export function createExtension(
     const readOnly = options.readOnly ?? effective.readOnly;
     const gate = createWriteSafetyGate({ readOnly });
     const resolveArgv = () => mcpServerArgv(launcher, palace.palacePath);
+    let hub: HubRuntime;
+    try {
+      hub = (options.createHub ?? ((nextLauncher, palacePath) =>
+        defaultCreateHub({ launcher: nextLauncher, palacePath })))(launcher, palace.palacePath);
+    } catch {
+      return refuse('inert', 'MemPalace Hub setup failed. Install MemPalace 3.9.0 and restart Pi.');
+    }
+    const clientDeps: McpClientDeps = { ensureHub: () => hub.ensureHub(), onCompatibilityError: warnOnce };
     const client = options.createMcpClient
-      ? options.createMcpClient(resolveArgv, cwd)
-      : defaultCreateMcpClient(resolveArgv, cwd, { onCompatibilityError: warnOnce });
+      ? options.createMcpClient(resolveArgv, cwd, clientDeps)
+      : defaultCreateMcpClient(resolveArgv, cwd, clientDeps);
 
     const lifecycle = createLifecycle({
       launcher,
