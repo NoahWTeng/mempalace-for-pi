@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  appendFileSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -25,6 +26,16 @@ const CORE_VERSIONS = ['3.6.0', '3.7.1'];
 const CURRENT_CORE_VERSION = '3.9.0';
 const PROCESS_COUNT = 8;
 const NETWORK_LIMIT = 0;
+const SHA256 = /^[a-f0-9]{64}$/u;
+const OID = /^[a-f0-9]{40}$/u;
+const LIFECYCLE_PHASES = [
+  'pi-install',
+  'pi-list',
+  'hub-startup',
+  'hub-recovery',
+  'concurrent-writes',
+  ...CORE_VERSIONS.map((version) => `migration-${version}`),
+];
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const fixture = join(root, 'test', 'mempalace', 'fixtures');
 const networkGuard = join(fixture, 'network-guard.mjs');
@@ -53,6 +64,12 @@ function parseArgs() {
 function bounded(value, limit = 4_000) {
   const text = String(value ?? '');
   return text.length <= limit ? text : text.slice(-limit);
+}
+
+function requiredBinding(name) {
+  const value = process.env[name];
+  assert(value && value.trim() === value, `${name} must not be empty`);
+  return value;
 }
 
 function cleanEnv(overrides = {}) {
@@ -507,8 +524,20 @@ async function runLegacyMigration({ version, core, currentCore, env, job }) {
       await migrated.close();
     }
     assert.equal(realpathSync(locationFromStatus(after.status)), realpathSync(copy));
-    assert.deepEqual(normalizedDrawers(after.drawers), normalizedDrawers(before.drawers));
+    const beforeDrawers = normalizedDrawers(before.drawers);
+    const afterDrawers = normalizedDrawers(after.drawers);
+    const beforeDiary = before.diary?.entries ?? [];
+    const afterDiary = after.diary?.entries ?? [];
+    assert.deepEqual(afterDrawers, beforeDrawers);
     assert.deepEqual(after.diary, before.diary);
+    const recordsBefore = beforeDrawers.length + beforeDiary.length;
+    const recordsAfter = afterDrawers.length + afterDiary.length;
+    assert.equal(recordsBefore, 5, `${version} did not create five predecessor records`);
+    assert.equal(recordsAfter, recordsBefore, `${version} did not retain every predecessor record`);
+    const syntheticPredecessor = beforeDrawers.every((drawer) =>
+      String(drawer.content_preview).startsWith(`task1249-${version}-drawer-`)) &&
+      beforeDiary.every((entry) => String(entry.content).startsWith(`task1249-${version}-diary-`));
+    assert(syntheticPredecessor, `${version} predecessor fixture was not measured`);
     const originalAfterDigest = hashTree(palace);
     assert.equal(originalAfterDigest, originalDigest);
     return {
@@ -516,8 +545,12 @@ async function runLegacyMigration({ version, core, currentCore, env, job }) {
       originalDigest,
       originalAfterDigest,
       copyDigest: hashTree(copy),
-      drawers: normalizedDrawers(before.drawers).length,
-      diaryEntries: before.diary?.entries?.length ?? 0,
+      drawers: beforeDrawers.length,
+      diaryEntries: beforeDiary.length,
+      recordsBefore,
+      recordsAfter,
+      retainedPercent: recordsBefore === 0 ? 100 : (100 * recordsAfter) / recordsBefore,
+      syntheticPredecessor,
       idsPreservedPercent: 100,
       contentPreservedPercent: 100,
       diaryPreservedPercent: 100,
@@ -529,6 +562,7 @@ async function runLegacyMigration({ version, core, currentCore, env, job }) {
 }
 
 async function runConcurrency({ piBin, wrapper, core, venv, env, home, currentAgent, linkedAgent, currentPalace, barrier, job, consumer }) {
+  const lifecycle = [];
   const warmup = spawn(wrapper, ['--transport', 'http', '--host', '127.0.0.1', '--port', '0', '--palace', currentPalace], {
     env: { ...env, MEMPALACE_OFFICIAL_CORE: core },
     detached: true,
@@ -541,6 +575,7 @@ async function runConcurrency({ piBin, wrapper, core, venv, env, home, currentAg
   refreshOwnedPids();
   assert(owned.hub.has(firstInfo.pid), 'Hub PID was not recorded separately');
   assert.equal(firstInfo.palace_path, realpathSync(currentPalace));
+  lifecycle.push('hub-startup');
 
   const currentEnv = runtimeEnv({ home, agent: currentAgent, job, consumer, venv, wrapper, core, network: env.MEMPALACE_NETWORK_EVIDENCE, barrier, id: 0, role: 'current' });
   const linkedEnv = runtimeEnv({ home, agent: linkedAgent, job, consumer, venv, wrapper, core, network: env.MEMPALACE_NETWORK_EVIDENCE, barrier, id: 0, role: 'linked' });
@@ -573,6 +608,7 @@ async function runConcurrency({ piBin, wrapper, core, venv, env, home, currentAg
     await waitForPiMarker(marker('recovered', id));
   }
   for (const record of piRuns.slice(1)) await waitPi(record);
+  lifecycle.push('hub-recovery');
   const session = await openMcp({ core, palace: currentPalace, env, label: 'concurrency-receipt', version: CURRENT_CORE_VERSION });
   let final;
   try {
@@ -595,6 +631,7 @@ async function runConcurrency({ piBin, wrapper, core, venv, env, home, currentAg
   refreshOwnedPids();
   const networkAttempts = readFileSync(env.MEMPALACE_NETWORK_EVIDENCE, 'utf8').split('\n').filter(Boolean);
   assert.equal(networkAttempts.length, NETWORK_LIMIT, `routine non-loopback network attempted: ${networkAttempts.join('\n')}`);
+  lifecycle.push('concurrent-writes');
   return {
     processCount: PROCESS_COUNT,
     currentWorktreeProcesses: PROCESS_COUNT / 2,
@@ -611,6 +648,7 @@ async function runConcurrency({ piBin, wrapper, core, venv, env, home, currentAg
     deleteOperations: 0,
     updateOperations: 0,
     operationCounts: { overwrite: 0, delete: 0, update: 0 },
+    lifecycle,
   };
 }
 
@@ -657,6 +695,8 @@ async function main() {
     tarball = join(tempRoot, packed[0]?.filename ?? '');
   }
   assert(existsSync(tarball), `candidate tarball missing: ${tarball}`);
+  const candidateSha256 = createHash('sha256').update(readFileSync(tarball)).digest('hex');
+  assert.match(candidateSha256, SHA256, 'candidate tarball digest is malformed');
   writeFileSync(join(consumer, 'package.json'), JSON.stringify({ name: 'mempalace-packaged-acceptance', version: '1.0.0', private: true }) + '\n');
   const installBase = cleanEnv({
     HOME: home,
@@ -667,7 +707,8 @@ async function main() {
   });
   run('npm', ['install', '--prefix', consumer, '--ignore-scripts', '--no-audit', '--no-fund', `@earendil-works/pi-coding-agent@${PI_VERSION}`, 'typebox@1.3.7'], { env: installBase });
   const piBin = join(consumer, 'node_modules', '.bin', 'pi');
-  assert.equal(run(piBin, ['--version'], { env: installBase }).trim(), PI_VERSION);
+  const piVersion = run(piBin, ['--version'], { env: installBase }).trim();
+  assert.equal(piVersion, PI_VERSION);
   const versionJobs = {};
   for (const version of [...CORE_VERSIONS, CURRENT_CORE_VERSION]) {
     const versionJob = join(job, `mempalace-${version}`);
@@ -679,6 +720,10 @@ async function main() {
     run('uv', ['pip', 'sync', '--python', join(venv, 'bin', 'python'), '--index-url', 'https://pypi.org/simple', '--index-strategy', 'first-index', '--only-binary', ':all:', '--require-hashes', join(versionJob, 'requirements.lock')], { env: installBase });
     versionJobs[version] = { job: versionJob, venv, cli: join(venv, 'bin', 'mempalace'), core: join(venv, 'bin', 'mempalace-mcp') };
   }
+  const coreVersionOutput = run(versionJobs[CURRENT_CORE_VERSION].cli, ['--version'], { env: installBase }).trim();
+  assert.match(coreVersionOutput, /^MemPalace \d+\.\d+\.\d+$/u, 'core version output is malformed');
+  const coreVersion = coreVersionOutput.slice('MemPalace '.length);
+  assert.equal(coreVersion, CURRENT_CORE_VERSION);
   writeWrapper(wrapper);
   symlinkSync(versionJobs[CURRENT_CORE_VERSION].cli, join(job, 'bin', 'mempalace'));
   await provisionCore({ coreCli: versionJobs[CURRENT_CORE_VERSION].cli, home, job });
@@ -689,9 +734,11 @@ async function main() {
   const candidate = packageSource(tarball);
   for (const agent of [currentAgent, linkedAgent]) {
     run(piBin, ['install', candidate], { env: installEnv(home, agent, job, consumer) });
+    assert(existsSync(join(agent, 'npm', 'node_modules', 'mempalace-for-pi', 'extensions', 'index.ts')));
+  }
+  for (const agent of [currentAgent, linkedAgent]) {
     const list = run(piBin, ['list'], { env: installEnv(home, agent, job, consumer) });
     assert(list.includes('mempalace-for-pi'));
-    assert(existsSync(join(agent, 'npm', 'node_modules', 'mempalace-for-pi', 'extensions', 'index.ts')));
   }
   const acceptanceEnv = runtimeEnv({
     home,
@@ -742,15 +789,74 @@ async function main() {
   }
   refreshOwnedPids();
   const networkAttempts = readFileSync(network, 'utf8').split('\n').filter(Boolean);
-  assert.equal(networkAttempts.length, 0, `routine non-loopback network attempted: ${networkAttempts.join('\n')}`);
+  assert.equal(networkAttempts.length, NETWORK_LIMIT, `routine non-loopback network attempted: ${networkAttempts.join('\n')}`);
+  assert.equal(concurrency.networkAttempts, networkAttempts.length);
+  assert.equal(migrations.length, CORE_VERSIONS.length);
+  const recordsBefore = migrations[0]?.recordsBefore;
+  const recordsAfter = migrations[0]?.recordsAfter;
+  assert(Number.isInteger(recordsBefore) && Number.isInteger(recordsAfter), 'migration record counts are missing');
+  assert(migrations.every((entry, index) =>
+    entry.version === CORE_VERSIONS[index] &&
+    entry.recordsBefore === recordsBefore &&
+    entry.recordsAfter === recordsAfter &&
+    entry.retainedPercent === 100 &&
+    entry.syntheticPredecessor === true));
+  const retainedPercent = recordsBefore === 0 ? 100 : (100 * recordsAfter) / recordsBefore;
+  assert.equal(recordsBefore, 5);
+  assert.equal(recordsAfter, 5);
+  assert.equal(retainedPercent, 100);
+  const syntheticPredecessor = migrations.every((entry) => entry.syntheticPredecessor);
+  assert(syntheticPredecessor, 'predecessor migration evidence is incomplete');
+  const lifecycle = ['pi-install', 'pi-list', ...concurrency.lifecycle, ...migrations.map((entry) => `migration-${entry.version}`)];
+  assert.deepEqual(lifecycle, LIFECYCLE_PHASES, 'measured lifecycle phases are incomplete or reordered');
+
+  if (process.env.MEMPALACE_MATRIX_EVIDENCE !== undefined) {
+    const expectedPlatform = requiredBinding('EXPECTED_PLATFORM');
+    const expectedArch = requiredBinding('EXPECTED_ARCH');
+    const nodeDeclared = requiredBinding('EXPECTED_NODE_VERSION');
+    const expectedSourceCommit = requiredBinding('EXPECTED_SOURCE_COMMIT');
+    const expectedCandidateSha256 = requiredBinding('EXPECTED_CANDIDATE_SHA256');
+    assert.equal(process.platform, expectedPlatform, 'platform binding differs from the measured host');
+    assert.equal(process.arch, expectedArch, 'architecture binding differs from the measured host');
+    assert.match(expectedSourceCommit, OID, 'source commit binding is malformed');
+    assert.match(expectedCandidateSha256, SHA256, 'candidate digest binding is malformed');
+    assert.equal(candidateSha256, expectedCandidateSha256, 'candidate digest differs from the matrix binding');
+    const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+    const sourceTree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: root, encoding: 'utf8' }).trim();
+    assert.match(sourceCommit, OID, 'measured source commit is malformed');
+    assert.match(sourceTree, OID, 'measured source tree is malformed');
+    assert.equal(sourceCommit, expectedSourceCommit, 'source commit differs from the matrix binding');
+    if (nodeDeclared === '24.x') assert.match(process.version, /^v24\./u, 'runtime does not satisfy Node 24.x');
+    else assert.equal(process.version, `v${nodeDeclared}`, 'runtime differs from the declared Node cell');
+    const record = {
+      candidateSha256,
+      sourceCommit,
+      sourceTree,
+      platform: process.platform,
+      arch: process.arch,
+      node: process.version,
+      nodeDeclared,
+      pi: piVersion,
+      core: coreVersion,
+      outcome: 'PASS',
+      recordsBefore,
+      recordsAfter,
+      retainedPercent,
+      networkAttempts: networkAttempts.length,
+      syntheticPredecessor,
+      lifecycle,
+    };
+    appendFileSync(process.env.MEMPALACE_MATRIX_EVIDENCE, `${JSON.stringify(record)}\n`);
+    process.stdout.write(`${JSON.stringify(record)}\n`);
+  }
   process.stdout.write(`${JSON.stringify({
     result: 'PASS',
-    piVersion: PI_VERSION,
-    currentCoreVersion: CURRENT_CORE_VERSION,
+    piVersion,
+    currentCoreVersion: coreVersion,
     concurrency,
     migrations,
-    networkAttempts: 0,
-    nonLoopbackSockets: 0,
+    networkAttempts: networkAttempts.length,
+    nonLoopbackSockets: networkAttempts.length,
     originalsByteIdentical: migrations.every((entry) => entry.originalDigest === entry.originalAfterDigest),
   })}\n`);
 }

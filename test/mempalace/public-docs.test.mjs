@@ -336,13 +336,13 @@ test('the recorded current matrix is one candidate proved by two complete cells'
     assert.equal(cell.retainedPercent, 100, `${cellName} did not retain every record`);
     assert.equal(cell.networkAttempts, 0, `${cellName} attempted routine non-loopback network`);
     for (const phase of [
-      'project-local-install',
-      'project-json-palace',
-      'restart',
-      'env-override',
-      'project-json-disabled',
-      'project-json-invalid',
-      'untrusted-json-unread',
+      'pi-install',
+      'pi-list',
+      'hub-startup',
+      'hub-recovery',
+      'concurrent-writes',
+      'migration-3.6.0',
+      'migration-3.7.1',
     ]) {
       assert.ok(cell.lifecycle.includes(phase), `${cellName} did not exercise ${phase}`);
     }
