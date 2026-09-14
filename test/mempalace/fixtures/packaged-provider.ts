@@ -92,6 +92,10 @@ function runConcurrency(pi: ExtensionAPI, config: { id: number; count: number; r
       if (completed === 'palace_status' && !/total_drawers|wings/u.test(result)) {
         throw new Error(`status lacks palace semantics: ${result}`);
       }
+      if (completed === 'palace_save' && step === 1) {
+        mark(root, 'saved', id);
+        waitForAll(root, 'saved', count);
+      }
       if (completed === 'palace_search' && step === count + 1) {
         mark(root, 'retrieved', id);
         waitForAll(root, 'retrieved', count);

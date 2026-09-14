@@ -213,6 +213,24 @@ test('pre-attestation core mode binds the current candidate and checks stale evi
   assert.match(gate, /unanchored/u);
 });
 
+test('concurrency waits for every unique save before the first search', () => {
+  const provider = read('test/mempalace/fixtures/packaged-provider.ts');
+  const uniqueSave = provider.indexOf("['palace_save', { content: unique[id],");
+  const firstSearch = provider.indexOf("...unique.map((content) => ['palace_search',");
+  const completion = provider.indexOf("const completed = calls[step - 1]?.[0];", uniqueSave);
+  const saved = provider.indexOf("if (completed === 'palace_save' && step === 1)", completion);
+  const marker = provider.indexOf("mark(root, 'saved', id);", saved);
+  const barrier = provider.indexOf("waitForAll(root, 'saved', count);", marker);
+  const dispatch = provider.indexOf('const next = calls[step++];', completion);
+  assert.ok(uniqueSave >= 0);
+  assert.ok(firstSearch > uniqueSave);
+  assert.ok(completion > uniqueSave);
+  assert.ok(saved > completion);
+  assert.ok(marker > saved);
+  assert.ok(barrier > marker);
+  assert.ok(dispatch > barrier);
+});
+
 test('3.9.0 packaged gate runs the real concurrency and migration acceptance', () => {
   const gate = read('scripts/gate-packaged.sh');
   assert.match(gate, /bash scripts\/gate-core\.sh --pre-attestation/u);
