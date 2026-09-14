@@ -74,6 +74,9 @@ function requiredBinding(name) {
 
 function cleanEnv(overrides = {}) {
   const env = { ...process.env };
+  for (const name of Object.keys(env)) {
+    if (/^(?:npm_config_|uv_|pip_)/iu.test(name)) delete env[name];
+  }
   for (const name of [
     'MEMPALACE_PALACE',
     'MEMPALACE_PALACE_PATH',
@@ -84,15 +87,6 @@ function cleanEnv(overrides = {}) {
     'NODE_OPTIONS',
     'PYTHONPATH',
     'MEMPALACE_NETWORK_EVIDENCE',
-    'UV_EXTRA_INDEX_URL',
-    'UV_INDEX',
-    'UV_INDEX_URL',
-    'UV_DEFAULT_INDEX',
-    'UV_FIND_LINKS',
-    'PIP_INDEX_URL',
-    'PIP_EXTRA_INDEX_URL',
-    'npm_config_registry',
-    'NPM_CONFIG_REGISTRY',
   ]) delete env[name];
   return { ...env, ...overrides };
 }
@@ -744,8 +738,8 @@ async function main() {
   await provisionCore({ coreCli: versionJobs[CURRENT_CORE_VERSION].cli, home, job });
   const currentIdentity = identity(root, home);
   mkdirSync(currentIdentity.palace, { recursive: true });
-  run('git', ['worktree', 'add', '--detach', '--quiet', join(tempRoot, 'linked'), 'HEAD'], { cwd: root, env: cleanEnv() });
   linkedRoot = join(tempRoot, 'linked');
+  run('git', ['worktree', 'add', '--detach', '--quiet', linkedRoot, 'HEAD'], { cwd: root, env: cleanEnv() });
   const candidate = packageSource(tarball);
   for (const agent of [currentAgent, linkedAgent]) {
     run(piBin, ['install', candidate], { env: installEnv(home, agent, job, consumer) });

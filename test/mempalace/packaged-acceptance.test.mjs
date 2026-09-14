@@ -49,29 +49,110 @@ test('packaged gate declares the exact supported matrix and real Pi lifecycle', 
   for (const command of [' install ', ' list', ' remove ']) assert.ok(gate.includes(command), `missing Pi lifecycle command: ${command}`);
   assert.doesNotMatch(gate, /-e "\$package_dir/u, 'installed integration must be package-discovered, never force-loaded');
   assert.match(gate, /MEMPALACE_PROVIDER_EXPECT_DISABLED/u);
-  assert.match(gate, /unset UV_EXTRA_INDEX_URL UV_INDEX UV_INDEX_URL UV_DEFAULT_INDEX UV_FIND_LINKS/u);
+  assert.match(gate, /sanitize_registry_env/u);
+  assert.match(gate, /npm_config_\*\|uv_\*\|pip_\*/u);
   assert.match(gate, /--index-strategy first-index/u);
   assert.match(gate, /PYTHONDONTWRITEBYTECODE=1/u, 'acceptance must not dirty the verified source tree');
   assert.match(gate, /synthetic-predecessor-0\.0\.9/u);
   assert.match(gate, /assert_snapshot/u);
 });
 
-test('the 3.9.0 packaged path sanitizes registry environment before execution', () => {
-  const gate = read('scripts/gate-packaged.sh');
-  const acceptance = read('scripts/acceptance-concurrency.mjs');
-  const branch = gate.indexOf('if [[ "$selected_version" == "3.9.0" ]]');
-  const sanitizer = gate.indexOf('unset UV_EXTRA_INDEX_URL');
-  assert.ok(branch >= 0 && sanitizer >= 0 && sanitizer < branch, 'registry sanitization must precede the 3.9.0 branch');
-  for (const name of [
-    'UV_EXTRA_INDEX_URL', 'UV_INDEX', 'UV_INDEX_URL', 'UV_DEFAULT_INDEX', 'UV_FIND_LINKS',
-    'PIP_INDEX_URL', 'PIP_EXTRA_INDEX_URL', 'npm_config_registry', 'NPM_CONFIG_REGISTRY',
-  ]) assert.ok(acceptance.includes(`'${name}'`), `child environment must remove ${name}`);
+test('the 3.9.0 packaged path sanitizes arbitrary registry prefixes before execution', () => {
+  const passing = probe();
+  executable(join(passing.root, 'bin', 'bash'), `#!/bin/sh
+if [ "$1" = "scripts/gate-core.sh" ]; then
+  printf 'global=%s\\n' "$(/usr/bin/printenv NPM_CONFIG_GLOBALCONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+  printf 'scoped=%s\\n' "$(/usr/bin/printenv 'npm_config_@scope:registry' 2>/dev/null || true)" >> "$PROBE_LOG"
+  printf 'userconfig=%s\\n' "$(/usr/bin/printenv NPM_CONFIG_USERCONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+  printf 'uvconfig=%s\\n' "$(/usr/bin/printenv UV_NO_CONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+  exit 23
+fi
+exec /bin/bash "$@"
+`);
+  const env = {
+    ...passing.env,
+    NPM_CONFIG_GLOBALCONFIG: '/tmp/global-config',
+    'npm_config_@scope:registry': 'https://attacker.invalid/npm',
+  };
+  try {
+    const result = runScript('scripts/gate-packaged.sh', ['--mempalace-version', '3.9.0', '--attested'], env);
+    assert.equal(result.status, 23);
+    assert.deepEqual(commands(passing.log), [
+      'global=',
+      'scoped=',
+      'userconfig=/dev/null',
+      'uvconfig=1',
+    ]);
+  } finally {
+    rmSync(passing.root, { recursive: true, force: true });
+  }
+});
+
+test('packaged gate preserves its selector while sanitizing registry environment', () => {
+  const passing = probe();
+  executable(join(passing.root, 'bin', 'bash'), `#!/bin/sh
+printf 'bash %s\\n' "$*" >> "$PROBE_LOG"
+if [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi
+exec /bin/bash "$@"
+`);
+  try {
+    const result = runScript('scripts/gate-packaged.sh', ['--mempalace-version', '3.9.0'], {
+      ...passing.env,
+      NPM_CONFIG_GLOBALCONFIG: '/tmp/global-config',
+      'npm_config_@scope:registry': 'https://attacker.invalid/npm',
+    });
+    assert.equal(result.status, 23);
+    assert.deepEqual(commands(passing.log), ['bash scripts/gate-core.sh --pre-attestation']);
+  } finally {
+    rmSync(passing.root, { recursive: true, force: true });
+  }
+});
+
+test('packaged acceptance removes arbitrary registry settings before child install', () => {
+  const root = mkdtempSync(join(tmpdir(), 'mempalace-registry-probe-'));
+  const bin = join(root, 'bin');
+  const log = join(root, 'install.log');
+  const tarball = join(root, 'candidate.tgz');
+  mkdirSync(bin);
+  writeFileSync(tarball, 'candidate');
+  executable(join(bin, 'npm'), `#!/bin/sh
+printf 'global=%s\\n' "$(/usr/bin/printenv NPM_CONFIG_GLOBALCONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+printf 'scoped=%s\\n' "$(/usr/bin/printenv 'npm_config_@scope:registry' 2>/dev/null || true)" >> "$PROBE_LOG"
+printf 'userconfig=%s\\n' "$(/usr/bin/printenv NPM_CONFIG_USERCONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+printf 'uvconfig=%s\\n' "$(/usr/bin/printenv UV_NO_CONFIG 2>/dev/null || true)" >> "$PROBE_LOG"
+exit 23
+`);
+  try {
+    const result = runNodeScript('scripts/acceptance-concurrency.mjs', ['--tarball', tarball], {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ''}`,
+      PROBE_LOG: log,
+      NPM_CONFIG_GLOBALCONFIG: '/tmp/global-config',
+      'npm_config_@scope:registry': 'https://attacker.invalid/npm',
+    });
+    assert.notEqual(result.status, 0);
+    assert.deepEqual(commands(log), [
+      'global=',
+      'scoped=',
+      'userconfig=/dev/null',
+      'uvconfig=1',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('the verified CI matrix selects attested packaged mode', () => {
   const workflow = read('.github/workflows/ci.yml');
   const matrix = workflow.split('\n  macos-arm64:\n')[1]?.split('\n  matrix-evidence:\n')[0] ?? '';
   assert.match(matrix, /bash scripts\/gate-release\.sh[\s\S]*--attested/u);
+});
+
+test('acceptance registers the linked worktree before attempting to add it', () => {
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  const assignment = acceptance.indexOf("linkedRoot = join(tempRoot, 'linked');");
+  const add = acceptance.indexOf("['worktree', 'add', '--detach', '--quiet', linkedRoot, 'HEAD']");
+  assert.ok(assignment >= 0 && add >= 0 && assignment < add, 'cleanup must know the linked worktree before registration can fail');
 });
 
 // The project document is released by the host, not by the package, so the

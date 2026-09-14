@@ -1,4 +1,4 @@
-import { createMcpClient, IncompatibleCoreError, type McpClient, type McpClientDeps } from './mcp-client.ts';
+import { createMcpClient, IncompatibleCoreError, type McpClient } from './mcp-client.ts';
 import { captureRecall as defaultCaptureRecall, type CaptureRecallOptions } from './recall.ts';
 import { mcpServerArgv, type Launcher, type PalaceResolution } from './resolve.ts';
 import { captureWakeUp } from './wakeup.ts';
@@ -28,9 +28,7 @@ export interface LifecycleOptions {
   readonly createClient?: (
     resolveArgv: () => ReturnType<typeof mcpServerArgv>,
     cwd: string,
-    deps?: McpClientDeps,
   ) => McpClient;
-  readonly ensureHub?: () => Promise<unknown>;
   readonly capture?: (
     client: McpClient,
     options: { project: string; rooms?: readonly string[] },
@@ -92,7 +90,6 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       client = buildClient(
         () => mcpServerArgv(options.launcher, options.palace.palacePath),
         options.cwd,
-        options.ensureHub ? { ensureHub: options.ensureHub } : undefined,
       );
     }
     return client;

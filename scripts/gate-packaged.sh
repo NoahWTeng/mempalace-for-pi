@@ -9,6 +9,24 @@ PYPI_INDEX="https://pypi.org/simple"
 tarball=""
 selected_version=""
 attested=false
+
+sanitize_registry_env() {
+  local name
+  local -a removals=()
+  shopt -s nocasematch
+  while IFS= read -r name; do
+    case "$name" in
+      npm_config_*|uv_*|pip_*) removals+=(-u "$name") ;;
+    esac
+  done < <(compgen -e)
+  shopt -u nocasematch
+  if ((${#removals[@]})); then
+    exec env "${removals[@]}" /bin/bash "$0" "$@"
+  fi
+}
+
+sanitize_registry_env "$@"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tarball) tarball="${2:-}"; shift 2 ;;
@@ -29,8 +47,6 @@ if [[ "$attested" == true && "$selected_version" != "3.9.0" ]]; then
 fi
 
 export NPM_CONFIG_USERCONFIG=/dev/null UV_NO_CONFIG=1
-unset UV_EXTRA_INDEX_URL UV_INDEX UV_INDEX_URL UV_DEFAULT_INDEX UV_FIND_LINKS \
-  PIP_INDEX_URL PIP_EXTRA_INDEX_URL npm_config_registry NPM_CONFIG_REGISTRY
 
 if [[ "$selected_version" == "3.9.0" ]]; then
   if [[ "$attested" == true ]]; then

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { IncompatibleCoreError, type McpClient } from '../../integration/mcp-client.ts';
-import { createLifecycle } from '../../integration/lifecycle.ts';
+import { createLifecycle, type LifecycleOptions } from '../../integration/lifecycle.ts';
 import type { Launcher, PalaceResolution } from '../../integration/resolve.ts';
 
 const launcher: Launcher = { mode: 'path', mempalaceMcpBin: '/test/mempalace-mcp' };
@@ -45,6 +45,28 @@ test('recall stays off by default, leaving the turn byte-identical and read-free
 
   assert.equal(turn?.systemPrompt, 'SYSTEM\n\nSNAPSHOT');
   assert.equal(recalls, 0);
+});
+
+// Lifecycle owns no Hub wiring. Keep this runtime check while accepting a
+// legacy-shaped object so the removed option cannot silently become active.
+test('lifecycle does not pass the removed Hub dependency to its client', async () => {
+  let argumentCount = 0;
+  const legacyOption = { ensureHub: async () => {} };
+  const lifecycle = createLifecycle({
+    ...(legacyOption as unknown as LifecycleOptions),
+    enabled: true,
+    launcher,
+    palace,
+    cwd: '/test/project',
+    createClient: function (_resolveArgv, _cwd) {
+      argumentCount = arguments.length;
+      return client();
+    },
+    capture: async () => 'SNAPSHOT',
+  });
+
+  await lifecycle.sessionStart();
+  assert.equal(argumentCount, 2);
 });
 
 // The stable snapshot has to stay ahead of the prompt-dependent block: every
