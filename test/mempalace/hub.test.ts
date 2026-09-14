@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import type { Socket } from 'node:net';
 import test from 'node:test';
 
 import type { Launcher } from '../../integration/resolve.ts';
@@ -138,6 +139,71 @@ test('the real health probe dispatches a request before reusing a registration',
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
+});
+
+test('a streaming 200 health response is bounded by wall-clock time', async () => {
+  const sockets = new Set<Socket>();
+  const intervals = new Set<ReturnType<typeof setInterval>>();
+  let responseCloses = 0;
+  let responseClosed!: () => void;
+  const responseClosedPromise = new Promise<void>((resolve) => { responseClosed = resolve; });
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'text/plain' });
+    response.write('ok');
+    const interval = setInterval(() => response.write(' '), 25);
+    intervals.add(interval);
+    response.once('close', () => {
+      responseCloses += 1;
+      responseClosed();
+      clearInterval(interval);
+      intervals.delete(interval);
+    });
+  });
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+
+  let pending: Promise<HubRegistration> | undefined;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const address = server.address();
+    assert(address && typeof address === 'object');
+    const expected = registration({ port: address.port });
+    const hub = createHub({
+      launcher,
+      palacePath,
+      deps: {
+        readRegistration: () => expected,
+        isPidAlive: () => true,
+        spawn: () => { throw new Error('must not spawn'); },
+      },
+    });
+    pending = hub.ensureHub();
+    const startedAt = Date.now();
+    const timeout = Symbol('timeout');
+    const result = await Promise.race([
+      pending.then(() => 'settled', () => 'settled'),
+      new Promise<typeof timeout>((resolve) => {
+        timeoutHandle = setTimeout(() => resolve(timeout), 5_000);
+      }),
+    ]);
+
+    assert.notEqual(result, timeout, 'streaming health response remained unresolved');
+    assert.ok(Date.now() - startedAt < 3_000, 'health probe exceeded its wall-clock bound');
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    for (const interval of intervals) clearInterval(interval);
+    for (const socket of sockets) socket.destroy();
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await responseClosedPromise;
+  }
+  assert.equal(responseCloses, 1);
 });
 
 test('a missing Hub is started with the detached loopback HTTP argv', async () => {

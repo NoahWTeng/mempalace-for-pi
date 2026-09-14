@@ -54,6 +54,7 @@ export interface HubRuntime {
 
 export const HUB_START_TIMEOUT_MS = 10_000;
 export const HUB_POLL_INTERVAL_MS = 50;
+export const HUB_HEALTH_TIMEOUT_MS = 1_000;
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
@@ -124,18 +125,44 @@ function health(registration: HubRegistration): Promise<boolean> {
   const requestFn = registration.scheme === 'https' ? httpsRequest : httpRequest;
   return new Promise((resolveHealth) => {
     let body = '';
+    let settled = false;
+    let responseStream: { destroy: () => void } | undefined;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const settle = (healthy: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (deadline) clearTimeout(deadline);
+      resolveHealth(healthy);
+    };
     const request = requestFn(
-      { hostname: registration.host, port: registration.port, path: '/healthz', method: 'GET', timeout: 1_000 },
+      {
+        hostname: registration.host,
+        port: registration.port,
+        path: '/healthz',
+        method: 'GET',
+        timeout: HUB_HEALTH_TIMEOUT_MS,
+      },
       (response) => {
+        responseStream = response;
         response.setEncoding('utf8');
         response.on('data', (chunk: string) => {
           if (body.length < 16) body += chunk.slice(0, 16 - body.length);
         });
-        response.on('end', () => resolveHealth(response.statusCode === 200 && body.trim() === 'ok'));
+        response.on('end', () => settle(response.statusCode === 200 && body.trim() === 'ok'));
+        response.on('aborted', () => settle(false));
+        response.on('error', () => settle(false));
+        response.on('close', () => settle(false));
       },
     );
-    request.on('error', () => resolveHealth(false));
-    request.on('timeout', () => request.destroy());
+    const abort = () => {
+      if (settled) return;
+      responseStream?.destroy();
+      request.destroy();
+      settle(false);
+    };
+    request.on('error', () => settle(false));
+    request.on('timeout', abort);
+    deadline = setTimeout(abort, HUB_HEALTH_TIMEOUT_MS);
     request.end();
   });
 }
