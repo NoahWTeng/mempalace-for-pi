@@ -120,6 +120,34 @@ test('dead, stale, malformed, and read-only registrations are replaced by one wr
   }
 });
 
+test('wildcard registrations are replaced rather than reused', async () => {
+  for (const host of ['0.0.0.0', '::', '[::]']) {
+    let current: unknown = registration({ host });
+    let spawns = 0;
+    const hub = createHub({
+      launcher,
+      palacePath,
+      deps: {
+        readRegistration: () => current,
+        isPidAlive: () => true,
+        health: async () => true,
+        pollIntervalMs: 1,
+        startTimeoutMs: 100,
+        spawn: () => {
+          spawns += 1;
+          current = registration({ pid: 9000 + spawns });
+          return { pid: 9000 + spawns, unref: () => {} };
+        },
+      },
+    });
+
+    const found = await hub.ensureHub();
+
+    assert.equal(found.host, '127.0.0.1', host);
+    assert.equal(spawns, 1, host);
+  }
+});
+
 test('concurrent cold callers share a start attempt without a JavaScript lock', async () => {
   let current: HubRegistration | null = null;
   let spawns = 0;

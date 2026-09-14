@@ -55,7 +55,7 @@ export interface HubRuntime {
 export const HUB_START_TIMEOUT_MS = 10_000;
 export const HUB_POLL_INTERVAL_MS = 50;
 
-const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]', '0.0.0.0', '::', '[::]']);
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
 function canonicalPath(value: string): string {
   const absolute = resolve(value);
@@ -121,12 +121,11 @@ function pidAlive(pid: number): boolean {
 }
 
 function health(registration: HubRegistration): Promise<boolean> {
-  const host = ['0.0.0.0', '::', '[::]'].includes(registration.host) ? '127.0.0.1' : registration.host;
   const requestFn = registration.scheme === 'https' ? httpsRequest : httpRequest;
   return new Promise((resolveHealth) => {
     let body = '';
     const request = requestFn(
-      { hostname: host, port: registration.port, path: '/healthz', method: 'GET', timeout: 1_000 },
+      { hostname: registration.host, port: registration.port, path: '/healthz', method: 'GET', timeout: 1_000 },
       (response) => {
         response.setEncoding('utf8');
         response.on('data', (chunk: string) => {
