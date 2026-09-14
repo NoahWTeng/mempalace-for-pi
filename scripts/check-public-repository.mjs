@@ -57,6 +57,7 @@ export const PUBLIC_REPOSITORY_FILES = [
   'test/mempalace/fixtures/packaged-provider.ts',
   'test/mempalace/fixtures/sitecustomize.py',
   'test/mempalace/lifecycle.test.ts',
+  'test/mempalace/matrix-evidence.mjs',
   'test/mempalace/mcp-client-integration.test.ts',
   'test/mempalace/mcp-client.test.ts',
   'test/mempalace/package-boundary.test.mjs',

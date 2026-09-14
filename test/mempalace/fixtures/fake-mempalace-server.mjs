@@ -20,10 +20,12 @@
 //                    its grandchild ignores SIGTERM; escalation must still own it
 //   orphan-exit      answers status, then exits by itself while its grandchild stays
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import * as readline from 'node:readline';
 
 const mode = process.argv[2] ?? 'normal';
+const readinessFile = process.argv[3];
 if (process.env.MEMPALACE_FAKE_PID_FILE) writeFileSync(process.env.MEMPALACE_FAKE_PID_FILE, String(process.pid));
 
 if (mode === 'exit-immediately') {
@@ -37,9 +39,20 @@ let grandchild = null;
 if (mode === 'grandchild' || mode === 'grandchild-hang' || mode === 'orphan-hang' || mode === 'orphan-exit') {
   grandchild = spawn(
     process.execPath,
-    ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"],
-    { stdio: 'ignore' },
+    ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); if (process.env.MEMPALACE_FAKE_READY_FILE) require('node:fs').writeFileSync(process.env.MEMPALACE_FAKE_READY_FILE, JSON.stringify({ pid: process.pid, handlerInstalled: process.listenerCount('SIGTERM') === 1 }));"],
+    {
+      stdio: 'ignore',
+      env: readinessFile ? { ...process.env, MEMPALACE_FAKE_READY_FILE: readinessFile } : process.env,
+    },
   );
+}
+
+if (readinessFile) {
+  const deadline = Date.now() + 5_000;
+  while (!existsSync(readinessFile)) {
+    if (Date.now() >= deadline) throw new Error('grandchild readiness acknowledgment missing');
+    await delay(5);
+  }
 }
 
 // A group that survives a polite signal: only an escalation reaches it, and the

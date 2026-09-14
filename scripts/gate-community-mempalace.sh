@@ -184,7 +184,6 @@ grep -q 'isProjectTrusted' integration/extension.ts || {
 # Renaming the package renames the tarball `npm pack` produces, so the packaged
 # release gate and the CI gate are the checks that observe a consumer left
 # behind. Both are required by a push to `main`, so the task gate owes them.
-# `scripts/gate-ci.sh` needs actionlint and a working Docker daemon.
 
 npm run release:check
 bash scripts/gate-ci.sh

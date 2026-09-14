@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 
 PI_VERSION="0.84.2"
 MEMPALACE_VERSIONS=("3.6.0" "3.7.1")
+ACCEPTANCE_VERSIONS=("${MEMPALACE_VERSIONS[@]}" "3.9.0")
 PYPI_INDEX="https://pypi.org/simple"
 tarball=""
 selected_version=""
@@ -15,11 +16,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 if [[ -n "$selected_version" ]]; then
-  [[ " ${MEMPALACE_VERSIONS[*]} " == *" $selected_version "* ]] || {
+  [[ " ${ACCEPTANCE_VERSIONS[*]} " == *" $selected_version "* ]] || {
     echo "unsupported MemPalace acceptance version: $selected_version" >&2; exit 2;
   }
   MEMPALACE_VERSIONS=("$selected_version")
 fi
+
+bash scripts/gate-core.sh
 
 root="$PWD"
 node_bin_dir="$(dirname "$(command -v node)")"

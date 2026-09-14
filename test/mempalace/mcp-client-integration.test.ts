@@ -19,8 +19,8 @@ const BIN = join(here, 'fixtures', 'fake-mempalace-bin.mjs');
 const scratch = mkdtempSync(join(tmpdir(), 'mempalace-transport-'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
-function argvFor(mode = 'normal') {
-  return () => ({ cmd: process.execPath, args: [SERVER, mode] });
+function argvFor(mode = 'normal', readinessFile?: string) {
+  return () => ({ cmd: process.execPath, args: [SERVER, mode, ...(readinessFile ? [readinessFile] : [])] });
 }
 
 function isRunning(pid: number): boolean {
@@ -207,33 +207,44 @@ test('a self-exiting group leader cannot orphan its grandchild or stdio', async 
   }
 });
 
-test('shutdown releases the owned child process group within 5 seconds', async () => {
-  const client = createMcpClient(argvFor('grandchild'), process.cwd());
-  const status = (await client.callReadTool('mempalace_status', {})) as Record<string, number>;
-  const serverPid = status.server_pid!;
-  const grandchildPid = status.grandchild_pid!;
-
-  assert.ok(isRunning(serverPid) && isRunning(grandchildPid), 'the fixture must own a live process group');
-
-  const started = Date.now();
-  await client.shutdown();
-
-  // The grandchild ignores SIGTERM on purpose: only a group-wide escalation
-  // reaches it, and signalling the direct child alone would orphan it.
-  let elapsed = 0;
-  while ((isRunning(serverPid) || isRunning(grandchildPid)) && elapsed < 5_000) {
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    elapsed = Date.now() - started;
-  }
+test('shutdown releases a ready grandchild after its group leader exits', async () => {
+  const readinessFile = join(scratch, 'shutdown-ready.json');
+  rmSync(readinessFile, { force: true });
+  const client = createMcpClient(argvFor('grandchild', readinessFile), process.cwd(), { shutdownGraceMs: 100 });
+  let serverPid: number | undefined;
+  let grandchildPid: number | undefined;
 
   try {
+    const status = (await client.callReadTool('mempalace_status', {})) as Record<string, number>;
+    serverPid = status.server_pid!;
+    grandchildPid = status.grandchild_pid!;
+    const readiness = JSON.parse(readFileSync(readinessFile, 'utf8')) as {
+      pid: number;
+      handlerInstalled: boolean;
+    };
+    assert.equal(readiness.pid, grandchildPid);
+    assert.equal(readiness.handlerInstalled, true);
+    assert.ok(isRunning(serverPid) && isRunning(grandchildPid), 'the fixture must own a live process group');
+
+    const started = Date.now();
+    const closing = client.shutdown();
+    const leaderDeadline = started + 1_000;
+    while (isRunning(serverPid) && Date.now() < leaderDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(!isRunning(serverPid), 'the ready group leader must exit after SIGTERM');
+    assert.ok(isRunning(grandchildPid), 'the ready grandchild must survive its leader');
+
+    await closing;
+    const elapsed = Date.now() - started;
     assert.ok(!isRunning(serverPid), `the MCP child outlived shutdown by ${elapsed}ms`);
     assert.ok(!isRunning(grandchildPid), `an owned grandchild outlived shutdown by ${elapsed}ms`);
-    assert.ok(Date.now() - started < 5_000, 'every owned resource must be released within 5 seconds');
+    assert.ok(elapsed < 5_000, 'every owned resource must be released within 5 seconds');
   } finally {
-    // Only ever the exact pids this test created.
     for (const pid of [grandchildPid, serverPid]) {
-      if (isRunning(pid)) process.kill(pid, 'SIGKILL');
+      if (typeof pid === 'number' && isRunning(pid)) process.kill(pid, 'SIGKILL');
     }
+    await client.shutdown();
+    rmSync(readinessFile, { force: true });
   }
 });

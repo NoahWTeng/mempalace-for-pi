@@ -49,7 +49,7 @@ const evidence = {
   knownLimitations: [
     'Local-only memory: no remote sync, embeddings, or shared-memory service.',
     'Inspection, export, correction, and forget commands are not included in 0.1.0.',
-    'Linux and current-runtime matrix evidence is a separate blocking release task.',
+    'The macOS ARM64 compatibility matrix is a separate blocking release task.',
     'Publication and tag creation require explicit owner authorization.',
   ],
   security: {

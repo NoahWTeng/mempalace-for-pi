@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Withdraw Linux product support from the current contract; the supported surface is now macOS arm64 only across Node `22.19.0`/`24.x`, Pi `0.84.2`, and MemPalace `3.6.0`/`3.7.1`. The previous cross-platform matrix remains historical evidence and is not trimmed or relabelled.
+- Regenerate the current four-cell macOS matrix from one measured candidate; no version bump, tag, publication, or release announcement is part of this change.
+
+### Fixed
+
+- Keep shutdown completion alive after an owned process-group leader exits before its remaining descendants, with a regression that acknowledges the descendant's SIGTERM-handler readiness.
+
 ## [0.2.0] - 2026-09-01
 
 Adds the first prompt template, so declaring a project's memory no longer has to be transcribed by hand.

@@ -27,7 +27,7 @@ the path.
 | --- | --- | --- |
 | `ci.yml` → `quick` | every push and pull request | Types, the full suite, and the repository boundary. This is the check that blocks a merge. |
 | `ci.yml` → `candidate` | push to `main`, manual | Packs the candidate, asserts the tree is clean and matches the commit, and uploads the tarball. |
-| `ci.yml` → `macos-arm64`, `linux-arm64` | manual only | The eight-cell compatibility matrix. Each cell installs a real core, drives Pi's whole package lifecycle, and uploads the record it measured. |
+| `ci.yml` → `macos-arm64` | manual only | The four-cell macOS ARM64 compatibility matrix. Each cell installs a real core, drives Pi's whole package lifecycle, and uploads the record it measured. |
 | `ci.yml` → `matrix-evidence` | manual only | Joins the per-cell records into `task-967-matrix.json` and publishes it as an artifact. |
 | `release.yml` | pushing a `v*` tag | Verifies, publishes to npm with provenance, and opens the GitHub release. |
 
@@ -39,10 +39,10 @@ refuses to attest a build from a self-hosted runner.
 
 ## Cutting a release
 
-The matrix pins one packed candidate by SHA-256, and the suite refuses to call a
-pairing verified unless that digest still matches what `npm pack` produces. So a
-release is only possible when the attested evidence describes the exact tree
-being tagged.
+The four-cell macOS ARM64 matrix pins one packed candidate by SHA-256, and the
+suite refuses to call a pairing verified unless that digest still matches what
+`npm pack` produces. So a release is only possible when the attested evidence
+describes the exact tree being tagged.
 
 The version bump is itself an edit to a packed file — `package.json` and
 `CHANGELOG.md` are both in `files` — so it has to happen *before* the
@@ -60,7 +60,7 @@ is what withdrew the first `0.1.1` attempt.
    npm version minor --no-git-tag-version   # or patch, chosen by hand
    ```
 
-   Then update the four literal tarball names in `ci.yml` and `gate-ci.sh`, the
+   Then update any versioned candidate reference in `ci.yml`, the
    manifest-version assertion in `test/mempalace/compatibility.test.ts`, and the
    `CHANGELOG.md` heading, and commit. `npm test` is red from here until step 3
    lands the refreshed evidence; that is the expected state, not a regression.

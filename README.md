@@ -39,7 +39,9 @@ The integration handles Pi lifecycle, project identity, tool registration, and s
 
 ## Quick start
 
-### 1. Install the verified toolchain
+### 1. Install the verified macOS ARM64 toolchain
+
+The current support contract is macOS ARM64 only. Linux is withdrawn from the current package contract; Windows remains outside scope.
 
 ```bash
 uv tool install --python 3.12 'mempalace==3.7.1'
@@ -49,7 +51,7 @@ mempalace --version
 pi --version
 ```
 
-MemPalace `3.6.0` is also verified. See the exact [compatibility matrix](docs/public/compatibility.md) before choosing another version.
+MemPalace `3.6.0` is also verified on macOS ARM64. See the exact [compatibility matrix](docs/public/compatibility.md) before choosing another version.
 
 ### 2. Install the integration into your project
 
@@ -140,17 +142,17 @@ The integration does not discover, copy, merge, migrate, move, or delete another
 
 ## Verified compatibility
 
-The release candidate passed all eight combinations in this cross-product:
+The current release candidate passed all four combinations in this macOS ARM64 cross-product:
 
 | Component | Verified values |
 | --- | --- |
-| Platform | macOS arm64, Linux arm64 |
+| Platform | macOS arm64 |
 | Node.js | `22.19.0`, `24.x` |
 | Pi | `0.84.2` |
 | MemPalace | `3.6.0`, `3.7.1` |
 | Python | `3.12` |
 
-Every cell retained 5/5 exact records, reported 100% retention, observed zero guarded non-loopback attempts during routine post-provisioning operations, and released owned resources within five seconds.
+Every cell retained 5/5 exact records, reported 100% retention, observed zero guarded non-loopback attempts during routine post-provisioning operations, and released owned resources within five seconds. Earlier Linux rows remain historical evidence only and are not a current support claim.
 
 This is an exhaustive support matrix—not a minimum-version promise. See [compatibility](docs/public/compatibility.md) for every cell and the full evidence boundary.
 
