@@ -16,8 +16,8 @@ const palacePath = '/tmp/palace-one';
 
 test('Hub discovery uses the upstream per-palace server registry path', () => {
   assert.equal(
-    serverInfoPath(palacePath, '/tmp/mempalace-home'),
-    '/tmp/mempalace-home/.mempalace/server/b2ad7d64376da64c7aeb6f30/serverinfo.json',
+    serverInfoPath('/palace-one', '/tmp/mempalace-home'),
+    '/tmp/mempalace-home/.mempalace/server/78c34b7fa5ad9f3c713d318c/serverinfo.json',
   );
 });
 
