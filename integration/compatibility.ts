@@ -22,11 +22,8 @@ export interface CompatibilityPairing {
  */
 export const SUPPORTED_PI_VERSIONS = ['0.84.2'] as const;
 
-/**
- * MemPalace core versions targeted for verification: `3.6.0` is the locally
- * verified baseline, `3.7.1` the current public release.
- */
-export const SUPPORTED_MEMPALACE_VERSIONS = ['3.6.0', '3.7.1'] as const;
+/** MemPalace core version required by the Hub runtime. */
+export const SUPPORTED_MEMPALACE_VERSIONS = ['3.9.0'] as const;
 
 /** Node versions already covered by `.github/workflows/ci.yml`. */
 export const SUPPORTED_NODE_VERSIONS = ['22.19.0', '24.x'] as const;
@@ -48,4 +45,5 @@ export const SUPPORTED_ARCHITECTURES = ['arm64'] as const;
 export const COMPATIBILITY_PAIRINGS: readonly CompatibilityPairing[] = [
   { pi: '0.84.2', mempalace: '3.6.0', verification: 'verified' },
   { pi: '0.84.2', mempalace: '3.7.1', verification: 'verified' },
+  { pi: '0.84.2', mempalace: '3.9.0', verification: 'pending' },
 ];

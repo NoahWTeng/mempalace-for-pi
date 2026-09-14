@@ -8,10 +8,14 @@ import { fileURLToPath } from 'node:url';
 import type { ProjectConfig } from '../../integration/config.ts';
 import type { Launcher } from '../../integration/resolve.ts';
 import {
+  CorePreflightError,
   PalaceAccessError,
   describeLauncher,
   describePalace,
+  hubServerArgv,
   mcpServerArgv,
+  mempalaceVersionArgv,
+  preflightLauncher,
   resolveLauncher,
   resolveOnPath,
   resolvePalace,
@@ -24,13 +28,15 @@ const BIN_FIXTURE = join(here, 'fixtures', 'fake-mempalace-bin.mjs');
 const scratch = mkdtempSync(join(tmpdir(), 'mempalace-resolve-'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
-/** A PATH entry holding an executable named exactly `mempalace-mcp`. */
+/** A PATH entry holding matching MemPalace console scripts. */
 function binDirectoryWithMcp(name: string): string {
   const dir = join(scratch, name);
   mkdirSync(dir, { recursive: true });
-  const installed = join(dir, 'mempalace-mcp');
-  copyFileSync(BIN_FIXTURE, installed);
-  chmodSync(installed, 0o755);
+  for (const script of ['mempalace-mcp', 'mempalace']) {
+    const installed = join(dir, script);
+    copyFileSync(BIN_FIXTURE, installed);
+    chmodSync(installed, 0o755);
+  }
   return dir;
 }
 
@@ -77,6 +83,7 @@ test('a `mempalace-mcp` executable on PATH resolves to path mode', () => {
 
   assert.equal(launcher.mode, 'path');
   assert.equal(launcher.mempalaceMcpBin, join(dir, 'mempalace-mcp'));
+  assert.equal(launcher.mempalaceBin, join(dir, 'mempalace'));
 });
 
 test('MEMPALACE_DIR resolves to uv mode when nothing is on PATH', () => {
@@ -138,6 +145,65 @@ test('uv mode runs the `mempalace-mcp` console script from the checkout', () => 
     cmd: 'uv',
     args: ['run', '--directory', checkout, 'mempalace-mcp', '--palace', palace],
   });
+});
+
+test('Hub argv uses the official detached loopback HTTP transport', () => {
+  const palace = join(scratch, 'hub-palace');
+  const pathLauncher: Launcher = { mode: 'path', mempalaceMcpBin: '/opt/mempalace-mcp' };
+  assert.deepEqual(hubServerArgv(pathLauncher, palace), {
+    cmd: '/opt/mempalace-mcp',
+    args: ['--transport', 'http', '--host', '127.0.0.1', '--port', '0', '--palace', palace],
+  });
+  assert.deepEqual(mempalaceVersionArgv({ mode: 'uv', dir: '/opt/mempalace' }), {
+    cmd: 'uv', args: ['run', '--directory', '/opt/mempalace', 'mempalace', '--version'],
+  });
+});
+
+test('version preflight accepts exactly MemPalace 3.9.0 and caches success', () => {
+  let calls = 0;
+  const launcher: Launcher = {
+    mode: 'path', mempalaceMcpBin: '/opt/mempalace-mcp', mempalaceBin: '/opt/mempalace',
+  };
+  const execFileSync = (cmd: string, args: readonly string[], _options: { encoding: 'utf8'; timeout: number }) => {
+    calls += 1;
+    assert.equal(cmd, '/opt/mempalace');
+    assert.deepEqual(args, ['--version']);
+    return 'MemPalace 3.9.0\n';
+  };
+
+  assert.equal(preflightLauncher(launcher, { execFileSync }), 'MemPalace 3.9.0');
+  assert.equal(preflightLauncher(launcher, { execFileSync }), 'MemPalace 3.9.0');
+  assert.equal(calls, 1);
+});
+
+test('version preflight rejects a CLI from a different installation', () => {
+  assert.throws(
+    () => preflightLauncher({
+      mode: 'path', mempalaceMcpBin: '/opt/other/mempalace-mcp', mempalaceBin: '/opt/mempalace',
+    }),
+    (error: unknown) => error instanceof CorePreflightError && error.reason === 'missing' && /matching/u.test(error.message),
+  );
+});
+
+test('version preflight rejects missing, old, and malformed cores before use', () => {
+  assert.throws(
+    () => preflightLauncher({ mode: 'path', mempalaceMcpBin: '/opt/mempalace-mcp' }),
+    (error: unknown) => error instanceof CorePreflightError && error.reason === 'missing' && /mempalace/u.test(error.message),
+  );
+  assert.throws(
+    () => preflightLauncher(
+      { mode: 'path', mempalaceMcpBin: '/opt/mempalace-mcp', mempalaceBin: '/opt/mempalace-old' },
+      { execFileSync: (_cmd, _args, _options) => 'MemPalace 3.7.1\n' },
+    ),
+    (error: unknown) => error instanceof CorePreflightError && error.reason === 'unsupported' && /3\.7\.1/u.test(error.message),
+  );
+  assert.throws(
+    () => preflightLauncher(
+      { mode: 'path', mempalaceMcpBin: '/opt/mempalace-mcp', mempalaceBin: '/opt/mempalace-bad' },
+      { execFileSync: (_cmd, _args, _options) => 'unexpected output\n' },
+    ),
+    (error: unknown) => error instanceof CorePreflightError && error.reason === 'malformed' && /malformed/u.test(error.message),
+  );
 });
 
 test('no launcher ever invokes the `mempalace` CLI or an `mcp` subcommand', () => {

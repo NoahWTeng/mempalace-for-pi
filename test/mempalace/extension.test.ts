@@ -6,6 +6,7 @@ import test, { after } from 'node:test';
 import type { ExtensionAPI, ToolDefinition } from '@earendil-works/pi-coding-agent';
 
 import { createExtension } from '../../integration/extension.ts';
+import { CorePreflightError } from '../../integration/resolve.ts';
 import type { McpClient } from '../../integration/mcp-client.ts';
 import type { Launcher, PalaceResolution } from '../../integration/resolve.ts';
 
@@ -37,6 +38,7 @@ const palace: PalaceResolution = {
 const active = {
   env: {}, cwd: '/repo',
   resolveLauncher: () => launcher,
+  preflightLauncher: () => 'MemPalace 3.9.0',
   resolvePalace: () => palace,
   createMcpClient: () => fakeClient(),
   captureWakeUp: async () => '',
@@ -125,8 +127,47 @@ test('missing core stays process-free and emits one actionable explanation when 
   assert.deepEqual(host.tools, []);
   assert.deepEqual(host.commands, []);
   assert.equal(notices.length, 1);
-  assert.match(notices[0]!, /Install MemPalace 3\.6\.0 or 3\.7\.1/u);
+  assert.match(notices[0]!, /Install MemPalace 3\.9\.0/u);
   assert.doesNotMatch(notices[0]!, /\/Users\/|\/home\//u);
+});
+
+test('core preflight fails before palace access with one actionable notice', async () => {
+  const host = fakePi();
+  const notices: string[] = [];
+  let palaceCalls = 0;
+  const handle = createExtension(host.pi, {
+    ...active,
+    preflightLauncher: () => {
+      throw new CorePreflightError('unsupported', 'the installed core reports 3.7.1; upgrade it first.');
+    },
+    resolvePalace: () => {
+      palaceCalls += 1;
+      return palace;
+    },
+  });
+  await sessionStart(host, hostContext({ notices, trusted: true }));
+
+  assert.equal(handle.active, false);
+  assert.equal(handle.reason, 'inert');
+  assert.equal(palaceCalls, 0);
+  assert.deepEqual(notices, ['MemPalace 3.9.0 is required: the installed core reports 3.7.1; upgrade it first.']);
+});
+
+test('the Hub ensure callback reaches the client before its first public call', async () => {
+  const host = fakePi();
+  const order: string[] = [];
+  createExtension(host.pi, {
+    ...active,
+    createHub: () => ({ ensureHub: async () => { order.push('hub'); return {} as never; } }),
+    createMcpClient: (_argv, _cwd, deps) => ({
+      callReadTool: async () => { await deps?.ensureHub?.(); order.push('read'); return {}; },
+      callWriteTool: async () => ({}), shutdown: async () => {}, isAlive: () => true,
+    }),
+    captureWakeUp: async (client) => { await client.callReadTool('mempalace_status'); return ''; },
+  });
+  await sessionStart(host, hostContext({ trusted: true }));
+
+  assert.deepEqual(order, ['hub', 'read']);
 });
 
 test('palace resolution failure is inert with one actionable path-free notice', async () => {

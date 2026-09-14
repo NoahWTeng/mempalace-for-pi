@@ -92,7 +92,7 @@ function initResult(id: unknown): unknown {
     result: {
       protocolVersion: '2025-06-18',
       capabilities: { tools: {} },
-      serverInfo: { name: 'fake-mempalace', version: '3.7.1' },
+      serverInfo: { name: 'fake-mempalace', version: '3.9.0' },
     },
   };
 }
@@ -216,6 +216,23 @@ test('the handshake happens once and is reused by later calls', async () => {
   assert.equal(methodsWritten(child).filter((method) => method === 'initialize').length, 1);
 });
 
+test('Hub readiness is established before spawning stdio and checked for every public call', async () => {
+  const child = autoRespond(makeFakeChild());
+  const order: string[] = [];
+  const client = createMcpClient(ARGV, '/cwd', {
+    spawn: ((...args: Parameters<typeof import('node:child_process').spawn>) => {
+      order.push('stdio');
+      return spawnSequence(child).spawn(...args);
+    }) as typeof import('node:child_process').spawn,
+    ensureHub: async () => { order.push('hub'); },
+  });
+
+  await client.callReadTool('mempalace_status', {});
+  await client.callReadTool('mempalace_search', { query: 'x' });
+
+  assert.deepEqual(order, ['hub', 'stdio', 'hub']);
+});
+
 test('an incompatible core stops after negotiation and reports one actionable diagnostic', async () => {
   const child = autoRespond(makeFakeChild(), {
     onInitialize: ({ id }) => ({
@@ -237,7 +254,7 @@ test('an incompatible core stops after negotiation and reports one actionable di
   await assert.rejects(
     client.callReadTool('mempalace_status', {}),
     (error: unknown) => error instanceof IncompatibleCoreError &&
-      /MemPalace 9\.9\.9/u.test(error.message) && /3\.6\.0 or 3\.7\.1/u.test(error.message),
+      /MemPalace 9\.9\.9/u.test(error.message) && /3\.9\.0/u.test(error.message),
   );
   assert.deepEqual(methodsWritten(child), ['initialize']);
   assert.equal(toolCalls(child), 0);
@@ -603,6 +620,45 @@ test('a write refused by the server is a definite outcome, not an uncertain one'
     return true;
   });
   assert.equal(toolCalls(child), 1);
+});
+
+test('the upstream Hub proxy failure is uncertain and is never replayed', async () => {
+  const child = autoRespond(makeFakeChild(46), {
+    onToolsCall: (msg) => ({
+      jsonrpc: '2.0',
+      id: msg.id,
+      error: { code: -32000, message: 'palace hub proxy failed: connection reset' },
+    }),
+  });
+  const replacement = autoRespond(makeFakeChild(460));
+  const spawns = spawnSequence(child, replacement);
+  const client = createMcpClient(ARGV, '/cwd', { spawn: spawns.spawn });
+
+  await assert.rejects(client.callWriteTool('mempalace_add_drawer', { content: 'c' }), (err: Error) => {
+    assert.ok(err instanceof UncertainWriteError);
+    return true;
+  });
+  assert.equal(toolCalls(child), 1);
+  assert.equal(spawns.calls, 1);
+});
+
+test('an unrelated -32000 write error remains a definite failure', async () => {
+  const child = autoRespond(makeFakeChild(460), {
+    onToolsCall: (msg) => ({
+      jsonrpc: '2.0',
+      id: msg.id,
+      error: { code: -32000, message: 'storage rejected the request' },
+    }),
+  });
+  const spawns = spawnSequence(child);
+  const client = createMcpClient(ARGV, '/cwd', { spawn: spawns.spawn });
+
+  await assert.rejects(client.callWriteTool('mempalace_add_drawer', { content: 'c' }), (err: Error) => {
+    assert.ok(!(err instanceof UncertainWriteError));
+    assert.equal(err.message, 'storage rejected the request');
+    return true;
+  });
+  assert.equal(spawns.calls, 1);
 });
 
 test('a connection that fails before dispatch is reconnected once and the write proceeds', async () => {

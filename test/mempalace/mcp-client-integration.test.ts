@@ -99,6 +99,22 @@ test('a real writer-lease refusal is surfaced verbatim and stays a definite outc
   }
 });
 
+test('a real Hub proxy failure is uncertain and is not replayed', async () => {
+  let hubChecks = 0;
+  const client = createMcpClient(argvFor('hub-proxy-failed'), process.cwd(), {
+    ensureHub: async () => { hubChecks += 1; },
+  });
+  try {
+    await assert.rejects(
+      client.callWriteTool('mempalace_add_drawer', { wing: 'w', room: 'r', content: 'c' }),
+      (err: Error) => err instanceof UncertainWriteError,
+    );
+    assert.equal(hubChecks, 1);
+  } finally {
+    await client.shutdown();
+  }
+});
+
 test('a read against a child that exits immediately recovers once, then fails clearly', async () => {
   const client = createMcpClient(argvFor('exit-immediately'), process.cwd());
   try {

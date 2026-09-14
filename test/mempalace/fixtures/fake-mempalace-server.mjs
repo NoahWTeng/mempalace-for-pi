@@ -12,6 +12,7 @@
 //   exit-immediately exits before reading anything (a child that is already dead)
 //   exit-on-call     answers initialize, then exits the moment a tool is called
 //   incompatible     answers initialize as unsupported MemPalace 9.9.9
+//   hub-proxy-failed returns the upstream indeterminate Hub proxy error for writes
 //   grandchild       normal, but owns a SIGTERM-ignoring child in its process group
 //   grandchild-hang  like `grandchild`, but the server itself also ignores SIGTERM
 //                    and answers nothing except mempalace_status, so a caller can
@@ -92,7 +93,7 @@ rl.on('line', (line) => {
       result: {
         protocolVersion: '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'fake-mempalace', version: mode === 'incompatible' ? '9.9.9' : '3.7.1' },
+        serverInfo: { name: 'fake-mempalace', version: mode === 'incompatible' ? '9.9.9' : '3.9.0' },
       },
     });
     return;
@@ -106,6 +107,15 @@ rl.on('line', (line) => {
     const args = msg.params?.arguments ?? {};
 
     if ((mode === 'grandchild-hang' || mode === 'orphan-hang') && name !== 'mempalace_status') return;
+
+    if (mode === 'hub-proxy-failed' && name === 'mempalace_add_drawer') {
+      send({
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: { code: -32000, message: 'palace hub proxy failed: connection reset' },
+      });
+      return;
+    }
 
     if (name === 'mempalace_add_drawer' && args.wing === '__refuse__') {
       send({

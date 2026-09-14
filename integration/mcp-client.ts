@@ -44,6 +44,7 @@ export interface McpClientDeps {
 	maxStdoutBufferBytes?: number;
 	onLog?: (message: string) => void;
 	onCompatibilityError?: (message: string) => void;
+	ensureHub?: () => Promise<unknown>;
 	/** Group-kill primitive, injectable for tests. Defaults to process.kill
 	 * (called with a NEGATIVE pid to signal the whole process group). */
 	processKill?: (pid: number, signal: NodeJS.Signals) => void;
@@ -442,9 +443,15 @@ export function createMcpClient(
 		args: Record<string, unknown>,
 		isWrite: boolean,
 	): Promise<unknown> {
+		await deps.ensureHub?.();
 		await ensureConnection();
 		const resp = await send("tools/call", { name, arguments: args }, false, isWrite ? name : undefined);
-		if (resp.error) throw new Error(resp.error.message);
+		if (resp.error) {
+			if (isWrite && resp.error.code === -32000 && resp.error.message.startsWith("palace hub proxy failed")) {
+				throw new UncertainWriteError(name, resp.error.message);
+			}
+			throw new Error(resp.error.message);
+		}
 		return extractResult(resp);
 	}
 
