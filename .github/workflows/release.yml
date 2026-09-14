@@ -2,14 +2,6 @@ name: Release
 
 # Publication is driven by an annotated tag, so the decision to release stays a
 # deliberate human act and the tag is the record of it.
-#
-# This workflow does not re-run the pending two-cell compatibility candidate. The
-# recorded historical matrix pins one packed candidate by SHA-256 in
-# `.github/verification/task-967-matrix.json`, and the suite refuses to call a
-# pairing verified unless that digest still matches what `npm pack` produces at
-# the attested commit. So the release-specific question is narrow and exact: is
-# the tarball about to be published byte-identical to the one the matrix
-# attested? If it is not, nothing here publishes.
 on:
   push:
     tags: ['v*']

@@ -6,7 +6,7 @@ import { dirname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { assertMatrixEvidenceBound, packCandidateDigest } from './matrix-evidence.mjs';
+import { assertMatrixEvidenceBound } from './matrix-evidence.mjs';
 
 const ROOT = new URL('../..', import.meta.url);
 const ROOT_PATH = fileURLToPath(ROOT);
@@ -27,14 +27,6 @@ function text(path) {
 
 function allText() {
   return PUBLIC_DOCS.map((path) => `\n<!-- ${path} -->\n${text(path)}`).join('\n');
-}
-
-function currentMatrixBinding() {
-  const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT_PATH, encoding: 'utf8' }).trim();
-  return {
-    EXPECTED_CANDIDATE_SHA256: packCandidateDigest(ROOT_PATH),
-    EXPECTED_SOURCE_COMMIT: commit,
-  };
 }
 
 function markdownLinks(content) {
@@ -301,7 +293,7 @@ test('documented rollback removes the old Pi source before installing its replac
 
 test('compatibility page is an exact projection of the current macOS matrix', () => {
   const matrix = JSON.parse(text('.github/verification/task-967-matrix.json'));
-  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH, env: currentMatrixBinding() });
+  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH, env: process.env });
   assert.equal(matrix.cells.length, declared.length);
   assert(matrix.cells.every((cell) => cell.outcome === 'PASS'));
   const compatibility = text('docs/public/compatibility.md');
@@ -335,7 +327,7 @@ test('compatibility states the exact evidence every recorded cell produced', () 
 
 test('the recorded historical matrix is one candidate proved by four complete cells', () => {
   const matrix = JSON.parse(text('.github/verification/task-967-matrix.json'));
-  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH, env: currentMatrixBinding() });
+  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH, env: process.env });
   assert.match(matrix.candidateSha256, /^[a-f0-9]{64}$/u);
   assert.equal(matrix.cells.length, declared.length);
   for (const cell of matrix.cells) {

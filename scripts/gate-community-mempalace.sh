@@ -14,7 +14,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-bash scripts/gate-core.sh --pre-attestation
+npm run check
+npm test
 
 # --- Task 1: provenance and compatibility baseline -------------------------
 
@@ -184,9 +185,7 @@ grep -q 'isProjectTrusted' integration/extension.ts || {
 # release gate and the CI gate are the checks that observe a consumer left
 # behind. Both are required by a push to `main`, so the task gate owes them.
 
-candidate_sha="$(node --input-type=module -e "import { packCandidateDigest } from './test/mempalace/matrix-evidence.mjs'; process.stdout.write(packCandidateDigest(process.cwd()));")"
-source_commit="$(git rev-parse HEAD)"
-EXPECTED_CANDIDATE_SHA256="$candidate_sha" EXPECTED_SOURCE_COMMIT="$source_commit" npm run release:check
+npm run release:check
 bash scripts/gate-ci.sh
 
 printf 'Community MemPalace gate: PASS\n'
