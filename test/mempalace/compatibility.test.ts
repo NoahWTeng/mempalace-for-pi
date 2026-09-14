@@ -106,8 +106,6 @@ test('compatibility declares only the Pi and MemPalace versions Task 6 will veri
   assert.deepEqual([...compatibility.SUPPORTED_PI_VERSIONS], ['0.84.2']);
   assert.deepEqual([...compatibility.SUPPORTED_MEMPALACE_VERSIONS], ['3.9.0']);
   assert.deepEqual(compatibility.COMPATIBILITY_PAIRINGS, [
-    { pi: '0.84.2', mempalace: '3.6.0', verification: 'verified' },
-    { pi: '0.84.2', mempalace: '3.7.1', verification: 'verified' },
     { pi: '0.84.2', mempalace: '3.9.0', verification: 'verified' },
   ]);
 });
@@ -130,7 +128,6 @@ test('every declared version combination has a pairing entry', async () => {
     compatibility.SUPPORTED_MEMPALACE_VERSIONS.map((mempalace) => `${pi}+${mempalace}`),
   ).sort();
   const declared = compatibility.COMPATIBILITY_PAIRINGS
-    .filter(({ mempalace }) => compatibility.SUPPORTED_MEMPALACE_VERSIONS.includes(mempalace as never))
     .map((pairing) => `${pairing.pi}+${pairing.mempalace}`)
     .sort();
   assert.deepEqual(

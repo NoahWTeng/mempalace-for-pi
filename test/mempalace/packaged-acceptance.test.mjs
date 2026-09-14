@@ -265,8 +265,8 @@ test('packaged gate runs core first and separates the explicit future selector',
   assert.match(gate, /packaged-real-provider\.mjs/u);
   assert.match(gate, /MEMPALACE_VERSIONS=\("3\.6\.0" "3\.7\.1"\)/u);
   const compatibility = read('integration/compatibility.ts');
-  assert.match(compatibility, /mempalace: '3\.6\.0', verification: 'verified'/u);
-  assert.match(compatibility, /mempalace: '3\.7\.1', verification: 'verified'/u);
+  assert.doesNotMatch(compatibility, /mempalace: '3\.6\.0', verification: 'verified'/u);
+  assert.doesNotMatch(compatibility, /mempalace: '3\.7\.1', verification: 'verified'/u);
   assert.match(compatibility, /mempalace: '3\.9\.0', verification: 'verified'/u);
 
   const passing = probe();
