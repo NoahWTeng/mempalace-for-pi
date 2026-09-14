@@ -185,7 +185,7 @@ grep -q 'isProjectTrusted' integration/extension.ts || {
 # release gate and the CI gate are the checks that observe a consumer left
 # behind. Both are required by a push to `main`, so the task gate owes them.
 
-npm run release:check
+npm run release:check -- --mempalace-version 3.9.0 --attested
 bash scripts/gate-ci.sh
 
 printf 'Community MemPalace gate: PASS\n'

@@ -7,6 +7,7 @@ trap 'rm -rf "$tmp"' EXIT
 
 candidate_tarball=""
 mempalace_version=""
+attested=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tarball)
@@ -17,6 +18,9 @@ while [[ $# -gt 0 ]]; do
       [[ -n "${2:-}" ]] || { echo '--mempalace-version requires a value' >&2; exit 2; }
       mempalace_version="$2"
       shift 2 ;;
+    --attested)
+      attested=true
+      shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -90,6 +94,7 @@ with_candidate node scripts/check-package.mjs
 acceptance_args=(--smoke --runs 1)
 [[ -z "$candidate_tarball" ]] || acceptance_args+=(--tarball "$candidate_tarball")
 [[ -z "$mempalace_version" ]] || acceptance_args+=(--mempalace-version "$mempalace_version")
+[[ "$attested" == true ]] && acceptance_args+=(--attested)
 node scripts/acceptance-extension.mjs "${acceptance_args[@]}"
 
 success="$tmp/success"

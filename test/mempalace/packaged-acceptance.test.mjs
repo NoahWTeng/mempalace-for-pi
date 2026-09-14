@@ -31,6 +31,12 @@ function runScript(script, args, env) {
   });
 }
 
+function runNodeScript(script, args, env) {
+  return spawnSync(process.execPath, [script, ...args], {
+    cwd: new URL('../..', import.meta.url), encoding: 'utf8', env,
+  });
+}
+
 function commands(log) {
   return existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) : [];
 }
@@ -265,6 +271,12 @@ test('packaged gate runs core first and separates the explicit future selector',
   assert.match(gate, /packaged-real-provider\.mjs/u);
   assert.match(gate, /MEMPALACE_VERSIONS=\("3\.6\.0" "3\.7\.1"\)/u);
   assert.match(read('scripts/gate-community-mempalace.sh'), /--mempalace-version 3\.9\.0 --attested/u);
+  assert.match(read('scripts/gate-community-mempalace.sh'), /release:check -- --mempalace-version 3\.9\.0 --attested/u);
+  assert.match(read('scripts/gate-release.sh'), /attested=true/u);
+  assert.match(read('scripts/gate-release.sh'), /acceptance_args\+=\(--attested\)/u);
+  const acceptanceExtension = read('scripts/acceptance-extension.mjs');
+  assert.match(acceptanceExtension, /value === '--attested'/u);
+  assert.match(acceptanceExtension, /args\.push\('--attested'\)/u);
   const compatibility = read('integration/compatibility.ts');
   assert.doesNotMatch(compatibility, /mempalace: '3\.6\.0', verification: 'verified'/u);
   assert.doesNotMatch(compatibility, /mempalace: '3\.7\.1', verification: 'verified'/u);
@@ -301,12 +313,28 @@ test('packaged gate runs core first and separates the explicit future selector',
     rmSync(attested.root, { recursive: true, force: true });
   }
 
-  const invalidMode = probe();
+  const forwarded = probe();
+  executable(join(forwarded.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi\nexec /bin/bash "$@"\n');
   try {
-    const result = runScript('scripts/gate-packaged.sh', ['--attested'], invalidMode.env);
-    assert.equal(result.status, 2);
+    const result = runNodeScript('scripts/acceptance-extension.mjs', [
+      '--smoke', '--runs', '1', '--mempalace-version', '3.9.0', '--attested',
+    ], forwarded.env);
+    assert.equal(result.status, 1);
+    assert.deepEqual(commands(forwarded.log), [
+      'bash scripts/gate-packaged.sh --mempalace-version 3.9.0 --attested',
+      'bash scripts/gate-core.sh',
+    ]);
+  } finally {
+    rmSync(forwarded.root, { recursive: true, force: true });
+  }
+
+  const invalidMode = probe();
+  executable(join(invalidMode.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nexec /bin/bash "$@"\n');
+  try {
+    const result = runNodeScript('scripts/acceptance-extension.mjs', ['--smoke', '--runs', '1', '--attested'], invalidMode.env);
+    assert.equal(result.status, 1);
     assert.match(result.stderr, /requires --mempalace-version 3\.9\.0/u);
-    assert.deepEqual(commands(invalidMode.log), []);
+    assert.deepEqual(commands(invalidMode.log), ['bash scripts/gate-packaged.sh --attested']);
   } finally {
     rmSync(invalidMode.root, { recursive: true, force: true });
   }
