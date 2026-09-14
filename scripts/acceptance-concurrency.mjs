@@ -530,13 +530,18 @@ async function runLegacyMigration({ version, core, currentCore, env, job }) {
     const afterDiary = after.diary?.entries ?? [];
     assert.deepEqual(afterDrawers, beforeDrawers);
     assert.deepEqual(after.diary, before.diary);
-    const recordsBefore = beforeDrawers.length + beforeDiary.length;
-    const recordsAfter = afterDrawers.length + afterDiary.length;
+    const drawerPrefix = `task1249-${version}-drawer-`;
+    const diaryPrefix = `task1249-${version}-diary-`;
+    const predecessorDrawers = beforeDrawers.filter((drawer) => String(drawer.content_preview).startsWith(drawerPrefix));
+    const predecessorAfterDrawers = afterDrawers.filter((drawer) => String(drawer.content_preview).startsWith(drawerPrefix));
+    const predecessorDiary = beforeDiary.filter((entry) => String(entry.content).startsWith(diaryPrefix));
+    const predecessorAfterDiary = afterDiary.filter((entry) => String(entry.content).startsWith(diaryPrefix));
+    const recordsBefore = predecessorDrawers.length + predecessorDiary.length;
+    const recordsAfter = predecessorAfterDrawers.length + predecessorAfterDiary.length;
     assert.equal(recordsBefore, 5, `${version} did not create five predecessor records`);
     assert.equal(recordsAfter, recordsBefore, `${version} did not retain every predecessor record`);
-    const syntheticPredecessor = beforeDrawers.every((drawer) =>
-      String(drawer.content_preview).startsWith(`task1249-${version}-drawer-`)) &&
-      beforeDiary.every((entry) => String(entry.content).startsWith(`task1249-${version}-diary-`));
+    const syntheticPredecessor = predecessorDrawers.length === 3 && predecessorDiary.length === 2 &&
+      predecessorAfterDrawers.length === predecessorDrawers.length && predecessorAfterDiary.length === predecessorDiary.length;
     assert(syntheticPredecessor, `${version} predecessor fixture was not measured`);
     const originalAfterDigest = hashTree(palace);
     assert.equal(originalAfterDigest, originalDigest);
