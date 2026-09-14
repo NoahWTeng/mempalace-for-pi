@@ -112,7 +112,7 @@ test('the packaged real provider composes only after a trusted session start', (
   assert.match(provider, /isProjectTrusted/u, 'the harness must state the trust decision it grants');
 });
 
-test('CI prepares the pending Pi 0.84.2 and MemPalace 3.9.0 matrix', () => {
+test('CI prepares the verified Pi 0.84.2 and MemPalace 3.9.0 matrix', () => {
   const workflow = read('.github/workflows/ci.yml');
   assert.match(workflow, /node-version:\s*\[22\.19\.0, 24\.x\]/u);
   assert.match(workflow, /pi-version:\s*\[0\.84\.2\]/u);
@@ -267,7 +267,7 @@ test('packaged gate runs core first and separates the explicit future selector',
   const compatibility = read('integration/compatibility.ts');
   assert.match(compatibility, /mempalace: '3\.6\.0', verification: 'verified'/u);
   assert.match(compatibility, /mempalace: '3\.7\.1', verification: 'verified'/u);
-  assert.match(compatibility, /mempalace: '3\.9\.0', verification: 'pending'/u);
+  assert.match(compatibility, /mempalace: '3\.9\.0', verification: 'verified'/u);
 
   const passing = probe();
   executable(join(passing.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi\nexec /bin/bash "$@"\n');

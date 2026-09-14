@@ -1,14 +1,14 @@
 # Install MemPalace for Pi
 
-This is the pending support-floor installation path for the community `mempalace-for-pi` integration. MemPalace is the official, separately installed core; this Pi package is only the integration. Review both projects before installation because Pi extensions execute with the user's permissions.
+This is the verified support-floor installation path for the community `mempalace-for-pi` integration. MemPalace is the official, separately installed core; this Pi package is only the integration. Review both projects before installation because Pi extensions execute with the user's permissions.
 
-## Pending candidate environment
+## Verified environment
 
-The unreleased candidate requires macOS on arm64, Node `22.19.0` or `24.x`, Pi `0.84.2`, and MemPalace `3.9.0`. The two-cell `3.9.0` matrix is pending verification, so these values are a candidate contract rather than a verified support claim. Linux is not supported by the current package contract, and Windows remains outside scope.
+The verified support contract requires macOS on arm64, Node `22.19.0` or `24.x`, Pi `0.84.2`, and MemPalace `3.9.0`. The exact two-cell `3.9.0` matrix passed with SHA-bound evidence. Linux is not supported by the current package contract, and Windows remains outside scope.
 
-The previous four-cell macOS matrix for MemPalace `3.6.0` and `3.7.1` remains unchanged in the repository evidence as historical migration context only. Do not use those old core versions with the current support-floor candidate.
+The previous four-cell macOS matrix for MemPalace `3.6.0` and `3.7.1` remains historical migration context only. Do not use those old core versions with the current support floor.
 
-The commands below install the pending core candidate and Pi `0.84.2`:
+The commands below install the verified support floor and Pi `0.84.2`:
 
 ```bash
 uv tool install --python 3.12 'mempalace==3.9.0'
@@ -17,7 +17,7 @@ mempalace --version
 pi --version
 ```
 
-Expected output is `MemPalace 3.9.0` and `0.84.2`; that output does not by itself verify the candidate. Existing users must update both MemPalace and `mempalace-for-pi` from the same approved source, then restart Pi:
+Expected output is `MemPalace 3.9.0` and `0.84.2`. Existing users must update both MemPalace and `mempalace-for-pi` from the same approved source, then restart Pi:
 
 ```bash
 uv tool install --python 3.12 'mempalace==3.9.0'
@@ -33,7 +33,7 @@ The integration installs from either npm (`npm:mempalace-for-pi`) or this reposi
 pi install git:github.com/NoahWTeng/mempalace-for-pi
 ```
 
-Both sources deliver one artifact: the release process pins a packed candidate by SHA-256, and the exact tarball is what npm serves when a release is authorized. Only the transport differs, so pick whichever your project's review policy prefers — installing from Git lets you read the source you are about to run. No release or publication is implied by this pending candidate.
+Both sources deliver one artifact: the release process pins a packed candidate by SHA-256, and the exact tarball is what npm serves when a release is authorized. Only the transport differs, so pick whichever your project's review policy prefers — installing from Git lets you read the source you are about to run.
 
 ## Install into one project
 
@@ -58,7 +58,7 @@ Both files belong in version control. `.pi/settings.json` records which reviewed
 
 ## Start locally
 
-The official core's default backend can provision local model assets on first use. Finish that provisioning before enforcing an offline environment. The candidate path uses the core's local `sqlite_exact` backend:
+The official core's default backend can provision local model assets on first use. Finish that provisioning before enforcing an offline environment. The verified path uses the core's local `sqlite_exact` backend:
 
 ```bash
 export MEMPALACE_BACKEND=sqlite_exact

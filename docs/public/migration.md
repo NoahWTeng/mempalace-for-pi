@@ -4,7 +4,7 @@ The integration lifecycle and palace lifecycle are separate. Every procedure her
 
 ## Support-floor transition
 
-MemPalace `3.9.0` is the pending support floor for the automatic loopback Hub. It is incompatible with the older `3.6.0` and `3.7.1` core pairings used by the historical four-cell matrix, which remain migration-only evidence. Update both components before starting Pi:
+MemPalace `3.9.0` is the verified support floor for the automatic loopback Hub. It is incompatible with the older `3.6.0` and `3.7.1` core pairings used by the historical four-cell matrix, which remain migration-only evidence. Update both components before starting Pi:
 
 ```bash
 uv tool install --python 3.12 'mempalace==3.9.0'

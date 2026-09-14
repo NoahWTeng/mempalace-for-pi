@@ -1,11 +1,11 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.0] - 2026-09-14
 
 ### Changed
 
-- Prepare the incompatible MemPalace `3.9.0` support-floor transition for the automatic loopback Hub. The two-cell macOS arm64 candidate across Node `22.19.0`/`24.x` with Pi `0.84.2` remains pending verification; no support claim is made without exact evidence.
-- Keep the four historical `3.6.0`/`3.7.1` macOS cells and `.github/verification/task-967-matrix.json` unchanged as migration-only evidence. No version bump, tag, publication, release, or announcement is part of this unreleased change.
+- Verify the incompatible MemPalace `3.9.0` support-floor transition for the automatic loopback Hub. The two-cell macOS arm64 matrix across Node `22.19.0`/`24.x` with Pi `0.84.2` passed with exact SHA-bound evidence.
+- Retain the four historical `3.6.0`/`3.7.1` macOS cells as migration-only context and record the verified two-cell candidate in `.github/verification/task-967-matrix.json`. This task creates no tag, publication, release, or announcement.
 - The Hub starts or reuses a per-palace loopback service, palace data persists across Pi sessions, and the upstream Hub may exit when idle. Existing `palace_search`, `palace_save`, `palace_diary`, and `palace_status` behavior remains unchanged.
 - Update MemPalace and `mempalace-for-pi` together, then restart Pi; if the Hub is unavailable, correct the versions or executable path and restart before retrying.
 

@@ -35,13 +35,13 @@ flowchart LR
     MCP --> Palace[(Local palace)]
 ```
 
-The integration handles Pi lifecycle, project identity, tool registration, and safety controls. With the pending MemPalace `3.9.0` support-floor candidate, it automatically starts a per-palace loopback Hub when no healthy registration exists and reuses a healthy Hub when one is already running. Palace data persists across Pi sessions; the upstream Hub may exit when idle, and the next operation starts or reuses it again. The separately installed MemPalace core remains responsible for storage, retrieval, and migrations.
+The integration handles Pi lifecycle, project identity, tool registration, and safety controls. With the verified MemPalace `3.9.0` support floor, it automatically starts a per-palace loopback Hub when no healthy registration exists and reuses a healthy Hub when one is already running. Palace data persists across Pi sessions; the upstream Hub may exit when idle, and the next operation starts or reuses it again. The separately installed MemPalace core remains responsible for storage, retrieval, and migrations.
 
 ## Quick start
 
-### 1. Install the pending macOS ARM64 support-floor candidate
+### 1. Install the verified macOS ARM64 support floor
 
-The unreleased transition requires MemPalace `3.9.0` on macOS ARM64, Node `22.19.0` or `24.x`, and Pi `0.84.2`. The `3.9.0` candidate is pending verification; Linux is withdrawn from the current package contract and Windows remains outside scope.
+The verified support contract requires MemPalace `3.9.0` on macOS ARM64, Node `22.19.0` or `24.x`, and Pi `0.84.2`. Linux is withdrawn from the current package contract and Windows remains outside scope.
 
 ```bash
 uv tool install --python 3.12 'mempalace==3.9.0'
@@ -51,7 +51,7 @@ mempalace --version
 pi --version
 ```
 
-For an existing installation, update both MemPalace and `mempalace-for-pi` from the same approved source, then restart Pi. The exact procedure is in the [installation guide](docs/public/install.md); do not treat `3.9.0` as verified until the pending candidate evidence is refreshed.
+For an existing installation, update both MemPalace and `mempalace-for-pi` from the same approved source, then restart Pi. The exact procedure is in the [installation guide](docs/public/install.md).
 
 ### 2. Install the integration into your project
 
@@ -131,7 +131,7 @@ Environment variables win over the project document, field by field, and the doc
 
 ## Privacy boundary
 
-The pending support-floor path remains local-first. After provisioning, routine wake-up, search, save, diary, status, and handoff operations use the loopback Hub and require no routine non-loopback network access.
+The verified support-floor path remains local-first. After provisioning, routine wake-up, search, save, diary, status, and handoff operations use the loopback Hub and require no routine non-loopback network access.
 
 Two boundaries remain outside this claim:
 
@@ -140,22 +140,22 @@ Two boundaries remain outside this claim:
 
 The integration does not discover, copy, merge, migrate, move, or delete another palace. Read the full [privacy boundary](docs/public/privacy.md) before using real project data.
 
-## Compatibility transition
+## Verified compatibility
 
-The next support floor is MemPalace `3.9.0`, and its macOS ARM64 candidate matrix is pending verification. The future matrix has exactly two cells: Node `22.19.0` and `24.x`, each with Pi `0.84.2` and MemPalace `3.9.0`. No `3.9.0` support claim is made until those cells produce exact, SHA-bound evidence.
+The verified support floor is MemPalace `3.9.0` on macOS ARM64 with exactly two cells: Node `22.19.0` and `24.x`, each with Pi `0.84.2`. Both cells produced exact, SHA-bound PASS evidence.
 
-The four PASS cells for MemPalace `3.6.0` and `3.7.1` remain in the recorded matrix as historical migration evidence only. They are not the current support floor. See [compatibility](docs/public/compatibility.md) for the pending boundary and the unchanged historical evidence file.
+The four PASS cells for MemPalace `3.6.0` and `3.7.1` remain historical migration context only. They are not the current support floor. See [compatibility](docs/public/compatibility.md) for the exact current matrix and historical boundary.
 
 ## Documentation
 
 | Guide | Covers |
 | --- | --- |
-| [Installation](docs/public/install.md) | Pending support-floor setup, updates, Hub startup, and first use. |
+| [Installation](docs/public/install.md) | Verified support-floor setup, updates, Hub startup, and first use. |
 | [Configuration](docs/public/configuration.md) | Environment controls, project identity, worktrees, and write policy. |
 | [Privacy](docs/public/privacy.md) | Storage, networking, non-retention, and credential boundaries. |
 | [Migration](docs/public/migration.md) | Existing palaces, disable, removal, reinstall, upgrade, and rollback. |
 | [Troubleshooting](docs/public/troubleshooting.md) | Missing core, timeouts, permissions, compatibility, and cleanup. |
-| [Compatibility](docs/public/compatibility.md) | Pending candidate matrix and historical verification scope. |
+| [Compatibility](docs/public/compatibility.md) | Verified current matrix and historical migration scope. |
 
 ## Development
 

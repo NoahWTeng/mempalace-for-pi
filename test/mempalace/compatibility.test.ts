@@ -60,7 +60,7 @@ test('the manifest publishes under exactly the intended identity', () => {
   const manifest = readManifest();
   assert.equal(manifest.private, undefined, 'a private manifest cannot be published');
   assert.equal(manifest.name, 'mempalace-for-pi');
-  assert.equal(manifest.version, '0.2.0');
+  assert.equal(manifest.version, '1.0.0');
   // Left undefined deliberately: an unscoped package already publishes publicly
   // to the default registry, so the only thing a publishConfig could do here is
   // redirect the release somewhere the reader is not expecting.
@@ -108,7 +108,7 @@ test('compatibility declares only the Pi and MemPalace versions Task 6 will veri
   assert.deepEqual(compatibility.COMPATIBILITY_PAIRINGS, [
     { pi: '0.84.2', mempalace: '3.6.0', verification: 'verified' },
     { pi: '0.84.2', mempalace: '3.7.1', verification: 'verified' },
-    { pi: '0.84.2', mempalace: '3.9.0', verification: 'pending' },
+    { pi: '0.84.2', mempalace: '3.9.0', verification: 'verified' },
   ]);
 });
 
@@ -689,7 +689,7 @@ test('a pairing may only claim verification with complete SHA-bound matrix evide
   assert.ok(evidence.cells.every((cell: Record<string, unknown>) =>
     cell.candidateSha256 === evidence.candidateSha256 && cell.sourceCommit === evidence.sourceCommit &&
     cell.sourceTree === evidence.sourceTree && cell.outcome === 'PASS'));
-  assert.deepEqual(verified.map(({ mempalace }) => mempalace).sort(), ['3.6.0', '3.7.1']);
+  assert.deepEqual(verified.map(({ mempalace }) => mempalace).sort(), ['3.9.0']);
 });
 
 function historicalMatrix(): Record<string, any> {

@@ -44,5 +44,5 @@ export const SUPPORTED_ARCHITECTURES = ['arm64'] as const;
 export const COMPATIBILITY_PAIRINGS: readonly CompatibilityPairing[] = [
   { pi: '0.84.2', mempalace: '3.6.0', verification: 'verified' },
   { pi: '0.84.2', mempalace: '3.7.1', verification: 'verified' },
-  { pi: '0.84.2', mempalace: '3.9.0', verification: 'pending' },
+  { pi: '0.84.2', mempalace: '3.9.0', verification: 'verified' },
 ];

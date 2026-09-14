@@ -95,20 +95,16 @@ test('installation documents the project-local package and the trust decision', 
   assert.match(install, /update both[^\n]*MemPalace[^\n]*mempalace-for-pi/iu);
 });
 
-test('the pending support floor keeps the daily public tools unchanged', () => {
+test('the verified support floor keeps the daily public tools unchanged', () => {
   const docs = allText();
-  assert.match(docs, /MemPalace `?3\.9\.0`?[\s\S]*pending/iu);
-  assert.doesNotMatch(
-    docs,
-    /(?:MemPalace `?3\.9\.0`?|`3\.9\.0`)[^\n]*(?:\bis verified\b|\bremains verified\b|\bcurrently verified\b|\| PASS \|)/iu,
-  );
-  assert.doesNotMatch(docs, /^\|[^\n]*\| 3\.9\.0 \| PASS \|$/gmu);
+  assert.match(docs, /MemPalace `?3\.9\.0`?[^\n]*(?:verified|support contract)/iu);
+  assert.doesNotMatch(docs, /MemPalace `?3\.9\.0`?[^\n]*pending/iu);
   assert.match(docs, /3\.6\.0[^\n]*3\.7\.1[^\n]*(?:historical|migration)/iu);
   assert.match(docs, /palace_search[\s\S]*palace_save[\s\S]*palace_diary[\s\S]*palace_status/iu);
   assert.match(docs, /daily[^\n]*(?:unchanged|remain the same)/iu);
 });
 
-test('the future CI candidate is exactly two macOS ARM64 cells', () => {
+test('the verified CI matrix is exactly two macOS ARM64 cells', () => {
   const workflow = text('.github/workflows/ci.yml');
   assert.match(workflow, /node-version:\s*\[22\.19\.0, 24\.x\]/u);
   assert.match(workflow, /pi-version:\s*\[0\.84\.2\]/u);
@@ -299,11 +295,11 @@ test('compatibility page is an exact projection of the current macOS matrix', ()
   const compatibility = text('docs/public/compatibility.md');
   assert.match(compatibility, /one SHA-bound packed candidate/iu);
   const documentedRows = compatibility.match(/^\| darwin \| arm64 \|/gmu) ?? [];
-  assert.equal(documentedRows.length, 4);
+  assert.equal(documentedRows.length, 6);
   assert.equal((compatibility.match(/^\| linux \| arm64 \|/gmu) ?? []).length, 0);
   assert.doesNotMatch(compatibility, /Windows|x64|amd64/iu);
-  assert.match(compatibility, /MemPalace `?3\.9\.0`?[^\n]*(?:pending|not verified)/iu);
-  assert.doesNotMatch(compatibility, /^\|[^\n]*\| 3\.9\.0 \| PASS \|$/gmu);
+  assert.match(compatibility, /MemPalace `?3\.9\.0`?[^\n]*(?:verified|support contract)/iu);
+  assert.doesNotMatch(compatibility, /MemPalace `?3\.9\.0`?[^\n]*pending/iu);
   assert.doesNotMatch(compatibility, /Node (?:20|21|23|25)|Pi 0\.(?!84\.2)/iu);
   for (const cell of matrix.cells) {
     const row = `| ${cell.platform} | ${cell.arch} | ${cell.nodeDeclared} | ${cell.pi} | ${cell.core} | PASS |`;
@@ -325,7 +321,7 @@ test('compatibility states the exact evidence every recorded cell produced', () 
   assert.match(compatibility, /`\.pi\/mempalace\.json`/u);
 });
 
-test('the recorded historical matrix is one candidate proved by four complete cells', () => {
+test('the recorded current matrix is one candidate proved by two complete cells', () => {
   const matrix = JSON.parse(text('.github/verification/task-967-matrix.json'));
   const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH, env: process.env });
   assert.match(matrix.candidateSha256, /^[a-f0-9]{64}$/u);
