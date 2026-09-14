@@ -81,7 +81,7 @@ if (!workflow.includes('macos-arm64:') || workflow.includes(`\n  ${retiredProduc
 }
 if ((workflow.match(/node-version: \[22\.19\.0, 24\.x\]/g) ?? []).length !== 1 ||
     (workflow.match(/pi-version: \[0\.84\.2\]/g) ?? []).length !== 1 ||
-    (workflow.match(/mempalace-version: \[3\.6\.0, 3\.7\.1\]/g) ?? []).length !== 1) {
+    (workflow.match(/mempalace-version: \[3\.9\.0\]/g) ?? []).length !== 1) {
   throw new Error('macOS packaged acceptance matrix is incomplete');
 }
 if (!workflow.includes('needs.candidate.outputs.sha256') || !workflow.includes('EXPECTED_SOURCE_COMMIT=') ||

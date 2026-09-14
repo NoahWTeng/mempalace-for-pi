@@ -112,11 +112,13 @@ test('the packaged real provider composes only after a trusted session start', (
   assert.match(provider, /isProjectTrusted/u, 'the harness must state the trust decision it grants');
 });
 
-test('CI pairs Pi 0.84.2 with both supported MemPalace versions', () => {
+test('CI prepares the pending Pi 0.84.2 and MemPalace 3.9.0 matrix', () => {
   const workflow = read('.github/workflows/ci.yml');
+  assert.match(workflow, /node-version:\s*\[22\.19\.0, 24\.x\]/u);
   assert.match(workflow, /pi-version:\s*\[0\.84\.2\]/u);
-  assert.match(workflow, /mempalace-version:\s*\[3\.6\.0, 3\.7\.1\]/u);
+  assert.match(workflow, /mempalace-version:\s*\[3\.9\.0\]/u);
   assert.match(workflow, /gate-release\.sh[\s\S]*--mempalace-version/u);
+  assert.doesNotMatch(workflow, /linux-arm64:|windows:|win32/u);
 });
 
 test('Node and Python guards deny every routine network API family', () => {

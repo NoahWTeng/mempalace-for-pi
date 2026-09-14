@@ -110,7 +110,7 @@ jobs:
       matrix:
         node-version: [22.19.0, 24.x]
         pi-version: [0.84.2]
-        mempalace-version: [3.6.0, 3.7.1]
+        mempalace-version: [3.9.0]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

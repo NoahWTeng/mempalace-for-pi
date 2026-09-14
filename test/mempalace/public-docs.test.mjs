@@ -6,7 +6,7 @@ import { dirname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { assertMatrixEvidenceBound } from './matrix-evidence.mjs';
+import { assertMatrixEvidenceBound, packCandidateDigest } from './matrix-evidence.mjs';
 
 const ROOT = new URL('../..', import.meta.url);
 const ROOT_PATH = fileURLToPath(ROOT);
@@ -27,6 +27,14 @@ function text(path) {
 
 function allText() {
   return PUBLIC_DOCS.map((path) => `\n<!-- ${path} -->\n${text(path)}`).join('\n');
+}
+
+function currentMatrixBinding() {
+  const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT_PATH, encoding: 'utf8' }).trim();
+  return {
+    EXPECTED_CANDIDATE_SHA256: packCandidateDigest(ROOT_PATH),
+    EXPECTED_SOURCE_COMMIT: commit,
+  };
 }
 
 function markdownLinks(content) {
@@ -57,7 +65,7 @@ test('identity, status, install path, first use, and release authorization claim
   assert.match(docs, /mempalace-for-pi/u);
   assert.match(docs, /official MemPalace core/u);
   assert.match(docs, /separate(?:ly)? (?:installed|distributed)|separate prerequisite/iu);
-  assert.match(text('docs/public/install.md'), /uv tool install --python 3\.12 'mempalace==3\.7\.1'/u);
+  assert.match(text('docs/public/install.md'), /uv tool install --python 3\.12 'mempalace==3\.9\.0'/u);
   assert.match(text('docs/public/install.md'), /pi install git:github\.com\/NoahWTeng\/mempalace-for-pi/u);
   // Both approved sources stay documented. npm is the short path; Git is the
   // one a reader can audit before running it, and it is the only one that can
@@ -90,7 +98,44 @@ test('installation documents the project-local package and the trust decision', 
   assert.match(install, /`\.pi\/mempalace\.json`/u);
   assert.match(install, /trust/iu);
   assert.match(install, /--approve/u);
-  assert.match(install, /restart/iu);
+  assert.match(install, /restart Pi/iu);
+  assert.match(install, /mempalace==3\.9\.0/u);
+  assert.match(install, /update both[^\n]*MemPalace[^\n]*mempalace-for-pi/iu);
+});
+
+test('the pending support floor keeps the daily public tools unchanged', () => {
+  const docs = allText();
+  assert.match(docs, /MemPalace `?3\.9\.0`?[\s\S]*pending/iu);
+  assert.doesNotMatch(
+    docs,
+    /(?:MemPalace `?3\.9\.0`?|`3\.9\.0`)[^\n]*(?:\bis verified\b|\bremains verified\b|\bcurrently verified\b|\| PASS \|)/iu,
+  );
+  assert.doesNotMatch(docs, /^\|[^\n]*\| 3\.9\.0 \| PASS \|$/gmu);
+  assert.match(docs, /3\.6\.0[^\n]*3\.7\.1[^\n]*(?:historical|migration)/iu);
+  assert.match(docs, /palace_search[\s\S]*palace_save[\s\S]*palace_diary[\s\S]*palace_status/iu);
+  assert.match(docs, /daily[^\n]*(?:unchanged|remain the same)/iu);
+});
+
+test('the future CI candidate is exactly two macOS ARM64 cells', () => {
+  const workflow = text('.github/workflows/ci.yml');
+  assert.match(workflow, /node-version:\s*\[22\.19\.0, 24\.x\]/u);
+  assert.match(workflow, /pi-version:\s*\[0\.84\.2\]/u);
+  assert.match(workflow, /mempalace-version:\s*\[3\.9\.0\]/u);
+  assert.equal((workflow.match(/mempalace-version:/gu) ?? []).length, 1);
+  assert.doesNotMatch(workflow, /linux-arm64:|windows:|win32/u);
+  assert.match(workflow, /runs-on: macos-15/iu);
+  assert.match(workflow, /EXPECTED_PLATFORM=darwin EXPECTED_ARCH=arm64/u);
+});
+
+test('the Auto-Hub contract covers loopback reuse, persistence, idle exit, and recovery', () => {
+  const docs = allText();
+  assert.match(docs, /automatically[^\n]*(?:start|launch)[^\n]*Hub/iu);
+  assert.match(docs, /loopback[^\n]*(?:Hub|HTTP)/iu);
+  assert.match(docs, /(?:reuse|reuses)[^\n]*Hub/iu);
+  assert.match(docs, /persist[^\n]*(?:across|between) Pi sessions/iu);
+  assert.match(docs, /upstream[^\n]*idle[^\n]*(?:exit|stop)/iu);
+  assert.match(docs, /restart Pi/iu);
+  assert.match(text('docs/public/troubleshooting.md'), /Hub[^\n]*(?:unavailable|failure|inert)/iu);
 });
 
 test('configuration documents the exact project JSON contract and its precedence', () => {
@@ -256,8 +301,7 @@ test('documented rollback removes the old Pi source before installing its replac
 
 test('compatibility page is an exact projection of the current macOS matrix', () => {
   const matrix = JSON.parse(text('.github/verification/task-967-matrix.json'));
-  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH });
-  const anchored = Boolean(process.env.EXPECTED_CANDIDATE_SHA256 || process.env.EXPECTED_SOURCE_COMMIT);
+  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH, env: currentMatrixBinding() });
   assert.equal(matrix.cells.length, declared.length);
   assert(matrix.cells.every((cell) => cell.outcome === 'PASS'));
   const compatibility = text('docs/public/compatibility.md');
@@ -266,12 +310,12 @@ test('compatibility page is an exact projection of the current macOS matrix', ()
   assert.equal(documentedRows.length, 4);
   assert.equal((compatibility.match(/^\| linux \| arm64 \|/gmu) ?? []).length, 0);
   assert.doesNotMatch(compatibility, /Windows|x64|amd64/iu);
-  assert.doesNotMatch(compatibility, /Node (?:20|21|23|25)|Pi 0\.(?!84\.2)|MemPalace 3\.(?!6\.0|7\.1)/iu);
-  if (!anchored) {
-    for (const cell of matrix.cells) {
-      const row = `| ${cell.platform} | ${cell.arch} | ${cell.nodeDeclared} | ${cell.pi} | ${cell.core} | PASS |`;
-      assert.equal(compatibility.split(row).length - 1, 1, `missing or duplicate matrix row: ${row}`);
-    }
+  assert.match(compatibility, /MemPalace `?3\.9\.0`?[^\n]*(?:pending|not verified)/iu);
+  assert.doesNotMatch(compatibility, /^\|[^\n]*\| 3\.9\.0 \| PASS \|$/gmu);
+  assert.doesNotMatch(compatibility, /Node (?:20|21|23|25)|Pi 0\.(?!84\.2)/iu);
+  for (const cell of matrix.cells) {
+    const row = `| ${cell.platform} | ${cell.arch} | ${cell.nodeDeclared} | ${cell.pi} | ${cell.core} | PASS |`;
+    assert.equal(compatibility.split(row).length - 1, 1, `missing or duplicate matrix row: ${row}`);
   }
 });
 
@@ -289,9 +333,9 @@ test('compatibility states the exact evidence every recorded cell produced', () 
   assert.match(compatibility, /`\.pi\/mempalace\.json`/u);
 });
 
-test('the recorded matrix is one candidate proved by four complete cells', () => {
+test('the recorded historical matrix is one candidate proved by four complete cells', () => {
   const matrix = JSON.parse(text('.github/verification/task-967-matrix.json'));
-  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH });
+  const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH, env: currentMatrixBinding() });
   assert.match(matrix.candidateSha256, /^[a-f0-9]{64}$/u);
   assert.equal(matrix.cells.length, declared.length);
   for (const cell of matrix.cells) {
