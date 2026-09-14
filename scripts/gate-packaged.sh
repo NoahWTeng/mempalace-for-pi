@@ -8,10 +8,12 @@ ACCEPTANCE_VERSIONS=("${MEMPALACE_VERSIONS[@]}" "3.9.0")
 PYPI_INDEX="https://pypi.org/simple"
 tarball=""
 selected_version=""
+attested=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tarball) tarball="${2:-}"; shift 2 ;;
     --mempalace-version) selected_version="${2:-}"; shift 2 ;;
+    --attested) attested=true; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -21,9 +23,17 @@ if [[ -n "$selected_version" ]]; then
   }
   MEMPALACE_VERSIONS=("$selected_version")
 fi
+if [[ "$attested" == true && "$selected_version" != "3.9.0" ]]; then
+  echo '--attested requires --mempalace-version 3.9.0' >&2
+  exit 2
+fi
 
 if [[ "$selected_version" == "3.9.0" ]]; then
-  bash scripts/gate-core.sh --pre-attestation
+  if [[ "$attested" == true ]]; then
+    bash scripts/gate-core.sh
+  else
+    bash scripts/gate-core.sh --pre-attestation
+  fi
   if [[ -n "$tarball" ]]; then
     exec node scripts/acceptance-concurrency.mjs --tarball "$tarball"
   fi

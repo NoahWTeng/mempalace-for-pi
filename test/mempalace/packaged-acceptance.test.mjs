@@ -264,6 +264,7 @@ test('packaged gate runs core first and separates the explicit future selector',
   assert.match(gate, /bash scripts\/gate-core\.sh/u);
   assert.match(gate, /packaged-real-provider\.mjs/u);
   assert.match(gate, /MEMPALACE_VERSIONS=\("3\.6\.0" "3\.7\.1"\)/u);
+  assert.match(read('scripts/gate-community-mempalace.sh'), /--mempalace-version 3\.9\.0 --attested/u);
   const compatibility = read('integration/compatibility.ts');
   assert.doesNotMatch(compatibility, /mempalace: '3\.6\.0', verification: 'verified'/u);
   assert.doesNotMatch(compatibility, /mempalace: '3\.7\.1', verification: 'verified'/u);
@@ -288,6 +289,26 @@ test('packaged gate runs core first and separates the explicit future selector',
     assert.deepEqual(commands(explicit.log), ['bash scripts/gate-core.sh --pre-attestation']);
   } finally {
     rmSync(explicit.root, { recursive: true, force: true });
+  }
+
+  const attested = probe();
+  executable(join(attested.root, 'bin', 'bash'), '#!/bin/sh\nprintf \'bash %s\\n\' "$*" >> "$PROBE_LOG"\nif [ "$1" = "scripts/gate-core.sh" ]; then exit 23; fi\nexec /bin/bash "$@"\n');
+  try {
+    const result = runScript('scripts/gate-packaged.sh', ['--mempalace-version', '3.9.0', '--attested'], attested.env);
+    assert.equal(result.status, 23);
+    assert.deepEqual(commands(attested.log), ['bash scripts/gate-core.sh']);
+  } finally {
+    rmSync(attested.root, { recursive: true, force: true });
+  }
+
+  const invalidMode = probe();
+  try {
+    const result = runScript('scripts/gate-packaged.sh', ['--attested'], invalidMode.env);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /requires --mempalace-version 3\.9\.0/u);
+    assert.deepEqual(commands(invalidMode.log), []);
+  } finally {
+    rmSync(invalidMode.root, { recursive: true, force: true });
   }
 
   const unsupported = probe();

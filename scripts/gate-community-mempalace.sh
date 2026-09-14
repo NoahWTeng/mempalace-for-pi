@@ -117,7 +117,7 @@ fi
 
 # --- Task 6: real packaged provider and lifecycle matrix -------------------
 
-bash scripts/gate-packaged.sh --mempalace-version 3.9.0
+bash scripts/gate-packaged.sh --mempalace-version 3.9.0 --attested
 
 for required in \
   test/mempalace/packaged-acceptance.test.mjs \
