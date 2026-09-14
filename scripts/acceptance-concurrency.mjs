@@ -84,6 +84,15 @@ function cleanEnv(overrides = {}) {
     'NODE_OPTIONS',
     'PYTHONPATH',
     'MEMPALACE_NETWORK_EVIDENCE',
+    'UV_EXTRA_INDEX_URL',
+    'UV_INDEX',
+    'UV_INDEX_URL',
+    'UV_DEFAULT_INDEX',
+    'UV_FIND_LINKS',
+    'PIP_INDEX_URL',
+    'PIP_EXTRA_INDEX_URL',
+    'npm_config_registry',
+    'NPM_CONFIG_REGISTRY',
   ]) delete env[name];
   return { ...env, ...overrides };
 }
@@ -536,13 +545,13 @@ async function runLegacyMigration({ version, core, currentCore, env, job }) {
     const predecessorAfterDrawers = afterDrawers.filter((drawer) => String(drawer.content_preview).startsWith(drawerPrefix));
     const predecessorDiary = beforeDiary.filter((entry) => String(entry.content).startsWith(diaryPrefix));
     const predecessorAfterDiary = afterDiary.filter((entry) => String(entry.content).startsWith(diaryPrefix));
-    const recordsBefore = predecessorDrawers.length + predecessorDiary.length;
-    const recordsAfter = predecessorAfterDrawers.length + predecessorAfterDiary.length;
-    assert.equal(recordsBefore, 5, `${version} did not create five predecessor records`);
-    assert.equal(recordsAfter, recordsBefore, `${version} did not retain every predecessor record`);
-    const syntheticPredecessor = predecessorDrawers.length === 3 && predecessorDiary.length === 2 &&
+    const migrationRecordsBefore = predecessorDrawers.length + predecessorDiary.length;
+    const migrationRecordsAfter = predecessorAfterDrawers.length + predecessorAfterDiary.length;
+    assert.equal(migrationRecordsBefore, 5, `${version} did not create five predecessor records`);
+    assert.equal(migrationRecordsAfter, migrationRecordsBefore, `${version} did not retain every predecessor record`);
+    const migrationSyntheticPredecessor = predecessorDrawers.length === 3 && predecessorDiary.length === 2 &&
       predecessorAfterDrawers.length === predecessorDrawers.length && predecessorAfterDiary.length === predecessorDiary.length;
-    assert(syntheticPredecessor, `${version} predecessor fixture was not measured`);
+    assert(migrationSyntheticPredecessor, `${version} predecessor fixture was not measured`);
     const originalAfterDigest = hashTree(palace);
     assert.equal(originalAfterDigest, originalDigest);
     return {
@@ -552,10 +561,10 @@ async function runLegacyMigration({ version, core, currentCore, env, job }) {
       copyDigest: hashTree(copy),
       drawers: beforeDrawers.length,
       diaryEntries: beforeDiary.length,
-      recordsBefore,
-      recordsAfter,
-      retainedPercent: recordsBefore === 0 ? 100 : (100 * recordsAfter) / recordsBefore,
-      syntheticPredecessor,
+      migrationRecordsBefore,
+      migrationRecordsAfter,
+      migrationRetainedPercent: migrationRecordsBefore === 0 ? 100 : (100 * migrationRecordsAfter) / migrationRecordsBefore,
+      migrationSyntheticPredecessor,
       idsPreservedPercent: 100,
       contentPreservedPercent: 100,
       diaryPreservedPercent: 100,
@@ -605,9 +614,10 @@ async function runConcurrency({ piBin, wrapper, core, venv, env, home, currentAg
   writeFileSync(join(barrier, 'release-1'), 'release\n');
   await waitForPiMarker(marker('recovered', 1));
   refreshOwnedPids();
-  const restarted = readPids(hubPidLog).filter((pid) => pid !== firstInfo.pid);
-  assert(restarted.length > 0, 'no replacement Hub PID was recorded');
-  assert(restarted.some((pid) => pid !== firstInfo.pid), 'Hub PID was reused after SIGKILL');
+  const observedHubPids = readPids(hubPidLog);
+  assert(observedHubPids.includes(firstInfo.pid), 'initial Hub PID was not recorded');
+  assert(observedHubPids.length > 1, 'no replacement Hub PID was recorded');
+  assert(observedHubPids.some((pid) => pid !== firstInfo.pid), 'Hub PID was reused after SIGKILL');
   for (let id = 2; id < PROCESS_COUNT; id += 1) {
     writeFileSync(join(barrier, `release-${id}`), 'release\n');
     await waitForPiMarker(marker('recovered', id));
@@ -797,21 +807,21 @@ async function main() {
   assert.equal(networkAttempts.length, NETWORK_LIMIT, `routine non-loopback network attempted: ${networkAttempts.join('\n')}`);
   assert.equal(concurrency.networkAttempts, networkAttempts.length);
   assert.equal(migrations.length, CORE_VERSIONS.length);
-  const recordsBefore = migrations[0]?.recordsBefore;
-  const recordsAfter = migrations[0]?.recordsAfter;
-  assert(Number.isInteger(recordsBefore) && Number.isInteger(recordsAfter), 'migration record counts are missing');
+  const migrationRecordsBefore = migrations[0]?.migrationRecordsBefore;
+  const migrationRecordsAfter = migrations[0]?.migrationRecordsAfter;
+  assert(Number.isInteger(migrationRecordsBefore) && Number.isInteger(migrationRecordsAfter), 'migration record counts are missing');
   assert(migrations.every((entry, index) =>
     entry.version === CORE_VERSIONS[index] &&
-    entry.recordsBefore === recordsBefore &&
-    entry.recordsAfter === recordsAfter &&
-    entry.retainedPercent === 100 &&
-    entry.syntheticPredecessor === true));
-  const retainedPercent = recordsBefore === 0 ? 100 : (100 * recordsAfter) / recordsBefore;
-  assert.equal(recordsBefore, 5);
-  assert.equal(recordsAfter, 5);
-  assert.equal(retainedPercent, 100);
-  const syntheticPredecessor = migrations.every((entry) => entry.syntheticPredecessor);
-  assert(syntheticPredecessor, 'predecessor migration evidence is incomplete');
+    entry.migrationRecordsBefore === migrationRecordsBefore &&
+    entry.migrationRecordsAfter === migrationRecordsAfter &&
+    entry.migrationRetainedPercent === 100 &&
+    entry.migrationSyntheticPredecessor === true));
+  const migrationRetainedPercent = migrationRecordsBefore === 0 ? 100 : (100 * migrationRecordsAfter) / migrationRecordsBefore;
+  assert.equal(migrationRecordsBefore, 5);
+  assert.equal(migrationRecordsAfter, 5);
+  assert.equal(migrationRetainedPercent, 100);
+  const migrationSyntheticPredecessor = migrations.every((entry) => entry.migrationSyntheticPredecessor);
+  assert(migrationSyntheticPredecessor, 'predecessor migration evidence is incomplete');
   const lifecycle = ['pi-install', 'pi-list', ...concurrency.lifecycle, ...migrations.map((entry) => `migration-${entry.version}`)];
   assert.deepEqual(lifecycle, LIFECYCLE_PHASES, 'measured lifecycle phases are incomplete or reordered');
 
@@ -844,11 +854,11 @@ async function main() {
       pi: piVersion,
       core: coreVersion,
       outcome: 'PASS',
-      recordsBefore,
-      recordsAfter,
-      retainedPercent,
+      migrationRecordsBefore,
+      migrationRecordsAfter,
+      migrationRetainedPercent,
       networkAttempts: networkAttempts.length,
-      syntheticPredecessor,
+      migrationSyntheticPredecessor,
       lifecycle,
     };
     appendFileSync(process.env.MEMPALACE_MATRIX_EVIDENCE, `${JSON.stringify(record)}\n`);
@@ -865,6 +875,9 @@ async function main() {
     originalsByteIdentical: migrations.every((entry) => entry.originalDigest === entry.originalAfterDigest),
   })}\n`);
 }
+
+const CLEANUP_TIMEOUT_MS = 10_000;
+let cleanupPromise;
 
 async function cleanup() {
   for (let id = 1; id < PROCESS_COUNT; id += 1) {
@@ -897,7 +910,26 @@ async function cleanup() {
   }
 }
 
+function runCleanup() {
+  cleanupPromise ??= cleanup();
+  return cleanupPromise;
+}
+
+function handleTermination(signal) {
+  process.exitCode = 1;
+  const timeout = setTimeout(() => process.exit(1), CLEANUP_TIMEOUT_MS);
+  runCleanup().catch((error) => {
+    process.stderr.write(`Packaged concurrency cleanup after ${signal} failed: ${error.stack ?? error}\n`);
+  }).finally(() => {
+    clearTimeout(timeout);
+    process.exit(1);
+  });
+}
+
+process.once('SIGTERM', () => handleTermination('SIGTERM'));
+process.once('SIGINT', () => handleTermination('SIGINT'));
+
 main().catch((error) => {
   process.stderr.write(`Packaged concurrency acceptance failed: ${error.stack ?? error}\n`);
   process.exitCode = 1;
-}).finally(cleanup);
+}).finally(runCleanup);

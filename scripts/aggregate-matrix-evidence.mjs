@@ -33,18 +33,18 @@ const REQUIRED_RECORD_FIELDS = [
   'candidateSha256',
   'core',
   'lifecycle',
+  'migrationRecordsAfter',
+  'migrationRecordsBefore',
+  'migrationRetainedPercent',
+  'migrationSyntheticPredecessor',
   'networkAttempts',
   'node',
   'nodeDeclared',
   'outcome',
   'pi',
   'platform',
-  'recordsAfter',
-  'recordsBefore',
-  'retainedPercent',
   'sourceCommit',
   'sourceTree',
-  'syntheticPredecessor',
 ];
 
 /** Shape of a committed cell, in the order the file records them. */
@@ -59,11 +59,11 @@ const CELL_FIELDS = [
   'sourceCommit',
   'sourceTree',
   'outcome',
-  'recordsBefore',
-  'recordsAfter',
-  'retainedPercent',
+  'migrationRecordsBefore',
+  'migrationRecordsAfter',
+  'migrationRetainedPercent',
   'networkAttempts',
-  'syntheticPredecessor',
+  'migrationSyntheticPredecessor',
   'lifecycle',
 ];
 
@@ -175,7 +175,7 @@ function validate(records, expected) {
     for (const field of ['sourceCommit', 'sourceTree']) {
       if (!OID.test(record[field])) fail(`${origin} has a malformed ${field}`);
     }
-    if (record.retainedPercent !== 100) fail(`${origin} retained ${record.retainedPercent}%`);
+    if (record.migrationRetainedPercent !== 100) fail(`${origin} retained ${record.migrationRetainedPercent}%`);
     if (record.networkAttempts !== 0) {
       fail(`${origin} recorded ${record.networkAttempts} guarded network attempts`);
     }

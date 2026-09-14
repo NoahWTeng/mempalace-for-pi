@@ -22,27 +22,6 @@ function client(overrides: Partial<McpClient> = {}): McpClient {
   };
 }
 
-test('the lifecycle passes Hub readiness into its lazily created client', async () => {
-  let hubChecks = 0;
-  let readCalls = 0;
-  const lifecycle = createLifecycle({
-    enabled: true,
-    launcher,
-    palace,
-    cwd: '/test/project',
-    ensureHub: async () => { hubChecks += 1; },
-    createClient: (_argv, _cwd, deps) => client({
-      callReadTool: async () => { await deps?.ensureHub?.(); readCalls += 1; return null; },
-    }),
-    capture: async (owned) => { await owned.callReadTool('mempalace_status'); return ''; },
-  });
-
-  await lifecycle.sessionStart();
-
-  assert.equal(hubChecks, 1);
-  assert.equal(readCalls, 1);
-});
-
 // Recall is opt-in. A project that never asks for it must produce exactly the
 // bytes it produced before recall existed, and must not reach the core between
 // turns at all.

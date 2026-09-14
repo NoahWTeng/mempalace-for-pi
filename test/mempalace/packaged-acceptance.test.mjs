@@ -56,6 +56,24 @@ test('packaged gate declares the exact supported matrix and real Pi lifecycle', 
   assert.match(gate, /assert_snapshot/u);
 });
 
+test('the 3.9.0 packaged path sanitizes registry environment before execution', () => {
+  const gate = read('scripts/gate-packaged.sh');
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  const branch = gate.indexOf('if [[ "$selected_version" == "3.9.0" ]]');
+  const sanitizer = gate.indexOf('unset UV_EXTRA_INDEX_URL');
+  assert.ok(branch >= 0 && sanitizer >= 0 && sanitizer < branch, 'registry sanitization must precede the 3.9.0 branch');
+  for (const name of [
+    'UV_EXTRA_INDEX_URL', 'UV_INDEX', 'UV_INDEX_URL', 'UV_DEFAULT_INDEX', 'UV_FIND_LINKS',
+    'PIP_INDEX_URL', 'PIP_EXTRA_INDEX_URL', 'npm_config_registry', 'NPM_CONFIG_REGISTRY',
+  ]) assert.ok(acceptance.includes(`'${name}'`), `child environment must remove ${name}`);
+});
+
+test('the verified CI matrix selects attested packaged mode', () => {
+  const workflow = read('.github/workflows/ci.yml');
+  const matrix = workflow.split('\n  macos-arm64:\n')[1]?.split('\n  matrix-evidence:\n')[0] ?? '';
+  assert.match(matrix, /bash scripts\/gate-release\.sh[\s\S]*--attested/u);
+});
+
 // The project document is released by the host, not by the package, so the
 // packaged journey has to install the candidate the way a project installs it,
 // state a trust decision either way, and record every phase it proved. Each
@@ -254,6 +272,19 @@ test('migration acceptance promotes the copied legacy palace before reads', () =
   const acceptance = read('scripts/acceptance-concurrency.mjs');
   assert.match(acceptance, /migrated\.call\('mempalace_add_drawer'/u);
   assert.match(acceptance, /migrationProbe\.reason, 'already_exists'/u);
+});
+
+test('Hub replacement assertion compares against every observed PID', () => {
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  assert.match(acceptance, /const observedHubPids = readPids\(hubPidLog\)/u);
+  assert.match(acceptance, /observedHubPids\.some\(\(pid\) => pid !== firstInfo\.pid\)/u);
+});
+
+test('acceptance cleanup handles termination signals within a bounded window', () => {
+  const acceptance = read('scripts/acceptance-concurrency.mjs');
+  assert.match(acceptance, /process\.once\('SIGTERM'/u);
+  assert.match(acceptance, /process\.once\('SIGINT'/u);
+  assert.match(acceptance, /CLEANUP_TIMEOUT_MS/u);
 });
 
 test('concurrency kills the Hub only after every peer reaches the safe barrier', () => {

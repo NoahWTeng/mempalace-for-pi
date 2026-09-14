@@ -144,7 +144,7 @@ The integration does not discover, copy, merge, migrate, move, or delete another
 
 The verified support floor is MemPalace `3.9.0` on macOS ARM64 with exactly two cells: Node `22.19.0` and `24.x`, each with Pi `0.84.2`. Both cells produced exact, SHA-bound PASS evidence.
 
-The four PASS cells for MemPalace `3.6.0` and `3.7.1` remain historical migration context only. They are not the current support floor. See [compatibility](docs/public/compatibility.md) for the exact current matrix and historical boundary.
+MemPalace `3.6.0` and `3.7.1` remain historical migration context only; they are not the current support floor or a current PASS claim. See [compatibility](docs/public/compatibility.md) for the exact current matrix and historical boundary.
 
 ## Documentation
 

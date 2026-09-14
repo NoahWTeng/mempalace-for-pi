@@ -273,6 +273,16 @@ test('the aggregator derives its expected cells from the declared surface', () =
   }
 });
 
+test('verified matrix retention fields name their migration journey', () => {
+  const matrix = readRepositoryFile('test/mempalace/matrix-evidence.mjs');
+  const acceptance = readRepositoryFile('scripts/acceptance-concurrency.mjs');
+  for (const field of ['migrationRecordsBefore', 'migrationRecordsAfter', 'migrationRetainedPercent', 'migrationSyntheticPredecessor']) {
+    assert.match(matrix, new RegExp(`\\b${field}\\b`, 'u'));
+    assert.match(acceptance, new RegExp(`\\b${field}\\b`, 'u'));
+  }
+  assert.doesNotMatch(matrix, /cell\.recordsBefore|cell\.recordsAfter|cell\.retainedPercent|cell\.syntheticPredecessor/u);
+});
+
 test('the CI gate keeps host integrity checks without Linux product execution', () => {
   const workflow = readRepositoryFile('.github/workflows/ci.yml');
   const gate = readRepositoryFile('scripts/gate-ci.sh');

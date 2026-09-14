@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 
 import type { Launcher } from '../../integration/resolve.ts';
-import { createHub, serverInfoPath, type HubRegistration } from '../../integration/hub.ts';
+import { createHub, HubUnavailableError, serverInfoPath, type HubRegistration } from '../../integration/hub.ts';
 
 const launcher: Launcher = {
   mode: 'path',
@@ -52,6 +52,55 @@ test('a healthy writable registration is reused without starting a Hub', async (
 
   assert.deepEqual(found, registration());
   assert.equal(spawns, 0);
+});
+
+test('missing launcher argv fails closed with HubUnavailableError', async () => {
+  const hub = createHub({ launcher: { mode: 'inert' }, palacePath, deps: { homeDir: '/tmp/mempalace-home' } });
+
+  await assert.rejects(
+    hub.ensureHub(),
+    (error: unknown) => error instanceof HubUnavailableError && /no matching MemPalace MCP executable/u.test(error.message),
+  );
+});
+
+test('Hub spawn failures fail closed with HubUnavailableError', async () => {
+  const hub = createHub({
+    launcher,
+    palacePath,
+    deps: {
+      readRegistration: () => null,
+      isPidAlive: () => false,
+      health: async () => false,
+      spawn: () => { throw new Error('spawn denied'); },
+    },
+  });
+
+  await assert.rejects(
+    hub.ensureHub(),
+    (error: unknown) => error instanceof HubUnavailableError && /Hub start failed: spawn denied/u.test(error.message),
+  );
+});
+
+test('Hub startup timeout fails closed with HubUnavailableError', async () => {
+  const sleep = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+  const hub = createHub({
+    launcher,
+    palacePath,
+    deps: {
+      readRegistration: () => null,
+      isPidAlive: () => false,
+      health: async () => false,
+      spawn: () => ({ pid: 4321, unref: () => {} }),
+      sleep,
+      pollIntervalMs: 1,
+      startTimeoutMs: 2,
+    },
+  });
+
+  await assert.rejects(
+    hub.ensureHub(),
+    (error: unknown) => error instanceof HubUnavailableError && /did not become ready/u.test(error.message),
+  );
 });
 
 test('the real health probe dispatches a request before reusing a registration', async () => {

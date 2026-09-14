@@ -157,7 +157,8 @@ jobs:
             EXPECTED_CANDIDATE_SHA256="${{ needs.candidate.outputs.sha256 }}" \
             bash scripts/gate-release.sh \
               --tarball "$RUNNER_TEMP/release-candidate/mempalace-for-pi-1.0.0.tgz" \
-              --mempalace-version "${{ matrix.mempalace-version }}"
+              --mempalace-version "${{ matrix.mempalace-version }}" \
+              --attested
           # A cell that passes but leaves no record cannot be aggregated, and a
           # matrix assembled from fewer cells than were run is the failure this
           # whole path exists to prevent. Fail here, where the cause is visible.

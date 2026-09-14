@@ -28,6 +28,10 @@ if [[ "$attested" == true && "$selected_version" != "3.9.0" ]]; then
   exit 2
 fi
 
+export NPM_CONFIG_USERCONFIG=/dev/null UV_NO_CONFIG=1
+unset UV_EXTRA_INDEX_URL UV_INDEX UV_INDEX_URL UV_DEFAULT_INDEX UV_FIND_LINKS \
+  PIP_INDEX_URL PIP_EXTRA_INDEX_URL npm_config_registry NPM_CONFIG_REGISTRY
+
 if [[ "$selected_version" == "3.9.0" ]]; then
   if [[ "$attested" == true ]]; then
     bash scripts/gate-core.sh
@@ -46,9 +50,6 @@ root="$PWD"
 node_bin_dir="$(dirname "$(command -v node)")"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-export NPM_CONFIG_USERCONFIG=/dev/null UV_NO_CONFIG=1
-unset UV_EXTRA_INDEX_URL UV_INDEX UV_INDEX_URL UV_DEFAULT_INDEX UV_FIND_LINKS \
-  PIP_INDEX_URL PIP_EXTRA_INDEX_URL npm_config_registry NPM_CONFIG_REGISTRY
 if [[ -z "$tarball" ]]; then
   pack_json="$(npm pack --json --pack-destination "$tmp")"
   filename="$(node -e 'const p=JSON.parse(require("node:fs").readFileSync(0,"utf8"));process.stdout.write(p[0].filename)' <<<"$pack_json")"

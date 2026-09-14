@@ -170,6 +170,22 @@ test('the Hub ensure callback reaches the client before its first public call', 
   assert.deepEqual(order, ['hub', 'read']);
 });
 
+test('Hub setup failure is inert with one actionable notice', async () => {
+  const host = fakePi();
+  const notices: string[] = [];
+  const handle = createExtension(host.pi, {
+    ...active,
+    createHub: () => { throw new Error('Hub setup unavailable'); },
+  });
+
+  await sessionStart(host, hostContext({ notices, trusted: true }));
+
+  assert.equal(handle.active, false);
+  assert.equal(handle.reason, 'inert');
+  assert.deepEqual(host.tools, []);
+  assert.deepEqual(notices, ['MemPalace Hub setup failed. Install MemPalace 3.9.0 and restart Pi.']);
+});
+
 test('palace resolution failure is inert with one actionable path-free notice', async () => {
   const host = fakePi();
   const notices: string[] = [];

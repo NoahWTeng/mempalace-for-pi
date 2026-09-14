@@ -287,6 +287,10 @@ test('documented rollback removes the old Pi source before installing its replac
   }
 });
 
+test('the public-doc guard excludes unsupported MemPalace 3.x versions', () => {
+  assert.ok(text('test/mempalace/public-docs.test.mjs').includes('MemPalace 3\\.(?!6\\.0|7\\.1|9\\.0)'));
+});
+
 test('compatibility page is an exact projection of the current macOS matrix', () => {
   const matrix = JSON.parse(text('.github/verification/task-967-matrix.json'));
   const { declared } = assertMatrixEvidenceBound(matrix, { root: ROOT_PATH, env: process.env });
@@ -295,12 +299,13 @@ test('compatibility page is an exact projection of the current macOS matrix', ()
   const compatibility = text('docs/public/compatibility.md');
   assert.match(compatibility, /one SHA-bound packed candidate/iu);
   const documentedRows = compatibility.match(/^\| darwin \| arm64 \|/gmu) ?? [];
-  assert.equal(documentedRows.length, 6);
+  assert.equal(documentedRows.length, 2);
+  assert.equal((compatibility.match(/^\| darwin \| arm64 \|[^\n]*\| (?:3\.6\.0|3\.7\.1) \| PASS \|$/gmu) ?? []).length, 0);
   assert.equal((compatibility.match(/^\| linux \| arm64 \|/gmu) ?? []).length, 0);
   assert.doesNotMatch(compatibility, /Windows|x64|amd64/iu);
   assert.match(compatibility, /MemPalace `?3\.9\.0`?[^\n]*(?:verified|support contract)/iu);
   assert.doesNotMatch(compatibility, /MemPalace `?3\.9\.0`?[^\n]*pending/iu);
-  assert.doesNotMatch(compatibility, /Node (?:20|21|23|25)|Pi 0\.(?!84\.2)/iu);
+  assert.doesNotMatch(compatibility, /Node (?:20|21|23|25)|Pi 0\.(?!84\.2)|MemPalace 3\.(?!6\.0|7\.1|9\.0)/iu);
   for (const cell of matrix.cells) {
     const row = `| ${cell.platform} | ${cell.arch} | ${cell.nodeDeclared} | ${cell.pi} | ${cell.core} | PASS |`;
     assert.equal(compatibility.split(row).length - 1, 1, `missing or duplicate matrix row: ${row}`);
@@ -316,9 +321,10 @@ test('compatibility states the exact evidence every recorded cell produced', () 
   assert.match(compatibility, /5\/5/u);
   assert.match(compatibility, /100% retention/u);
   assert.match(compatibility, /zero[^\n]*non-loopback/iu);
-  assert.match(compatibility, /five seconds/iu);
-  assert.match(compatibility, /project-local install/iu);
-  assert.match(compatibility, /`\.pi\/mempalace\.json`/u);
+  assert.match(compatibility, /bounded[^\n]*cleanup/iu);
+  assert.match(compatibility, /migration/iu);
+  assert.doesNotMatch(compatibility, /project-local install/iu);
+  assert.doesNotMatch(compatibility, /`\.pi\/mempalace\.json`/u);
 });
 
 test('the recorded current matrix is one candidate proved by two complete cells', () => {
@@ -331,9 +337,12 @@ test('the recorded current matrix is one candidate proved by two complete cells'
     assert.equal(cell.candidateSha256, matrix.candidateSha256, `${cellName} proves another candidate`);
     assert.equal(cell.sourceCommit, matrix.sourceCommit, `${cellName} proves another commit`);
     assert.equal(cell.sourceTree, matrix.sourceTree, `${cellName} proves another tree`);
-    assert.equal(cell.recordsBefore, 5, `${cellName} did not create five records`);
-    assert.equal(cell.recordsAfter, 5, `${cellName} did not retain five records`);
-    assert.equal(cell.retainedPercent, 100, `${cellName} did not retain every record`);
+    const retention = cell.migrationRecordsBefore === undefined
+      ? { before: cell.recordsBefore, after: cell.recordsAfter, percent: cell.retainedPercent }
+      : { before: cell.migrationRecordsBefore, after: cell.migrationRecordsAfter, percent: cell.migrationRetainedPercent };
+    assert.equal(retention.before, 5, `${cellName} did not create five migration records`);
+    assert.equal(retention.after, 5, `${cellName} did not retain five migration records`);
+    assert.equal(retention.percent, 100, `${cellName} did not retain every migration record`);
     assert.equal(cell.networkAttempts, 0, `${cellName} attempted routine non-loopback network`);
     const phases = cell.core === '3.9.0' ? [
       'pi-install',
