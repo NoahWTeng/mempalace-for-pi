@@ -136,6 +136,7 @@ function health(registration: HubRegistration): Promise<boolean> {
     );
     request.on('error', () => resolveHealth(false));
     request.on('timeout', () => request.destroy());
+    request.end();
   });
 }
 

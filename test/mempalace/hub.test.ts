@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import test from 'node:test';
 
 import type { Launcher } from '../../integration/resolve.ts';
@@ -51,6 +52,43 @@ test('a healthy writable registration is reused without starting a Hub', async (
 
   assert.deepEqual(found, registration());
   assert.equal(spawns, 0);
+});
+
+test('the real health probe dispatches a request before reusing a registration', async () => {
+  let requests = 0;
+  const server = createServer((_request, response) => {
+    requests += 1;
+    response.writeHead(200, { 'content-type': 'text/plain' });
+    response.end('ok\n');
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  try {
+    const address = server.address();
+    assert(address && typeof address === 'object');
+    const expected = registration({ port: address.port });
+    const hub = createHub({
+      launcher,
+      palacePath,
+      deps: {
+        readRegistration: () => expected,
+        isPidAlive: () => true,
+        spawn: () => { throw new Error('must not spawn'); },
+      },
+    });
+
+    const result = await Promise.race([
+      hub.ensureHub(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)),
+    ]);
+
+    assert.deepEqual(result, expected);
+    assert.equal(requests, 1);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
 test('a missing Hub is started with the detached loopback HTTP argv', async () => {
